@@ -35,7 +35,7 @@ enum {
  * Create new relative location for attachment if it's empty. 
  * WARNING! Keep in mind that attachment's location might be changed 
  * between midgard_blob method calls! */
-static void __get_filepath(MidgardBlob *self)
+static void __get_filepath(MidgardBlob *self, GError **error)
 {
 	if(self->priv->filepath)
 		return;
@@ -44,7 +44,6 @@ static void __get_filepath(MidgardBlob *self)
 	gchar *location = NULL;
 	gchar *up_a, *up_b;
 	MidgardObject *attachment = self->priv->attachment;
-
 	GParamSpec *pspec =
 		g_object_class_find_property(
 				G_OBJECT_GET_CLASS(G_OBJECT(attachment)), "location");
@@ -52,11 +51,8 @@ static void __get_filepath(MidgardBlob *self)
 	/* FIXME, we can not depend on just location property here.
 	 * This must be defined in mgdschema file. */
 	if(!pspec){
-		midgard_set_error(self->priv->mgd,
-				MGD_GENERIC_ERROR,
-				MGD_ERR_USER_DATA,
-				"Invalid Object. "
-				"Blobs can not be attached to %s",
+		g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_USER_DATA,
+				"Invalid Object. Blobs can not be attached to %s",
 				G_OBJECT_TYPE_NAME(G_OBJECT(attachment)));
 		return;
 	}
@@ -108,8 +104,7 @@ static void __get_channel(MidgardBlob *self, const gchar *mode, GError **error)
 			break;
 
 		default:
-			g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Invalid mode '%s'", mode);
-			midgard_set_error(self->priv->mgd, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Invalid mode '%s'", mode);
+			g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Invalid mode '%s'", mode);	
 			return;
 	}
 
@@ -118,13 +113,10 @@ static void __get_channel(MidgardBlob *self, const gchar *mode, GError **error)
 	/* Keep "binary" mode. It's useless on *nix but needed for WIN32 */
 	
 	if(!channel){
-		midgard_set_error(self->priv->mgd,
-				MGD_GENERIC_ERROR,
-				MGD_ERR_USER_DATA,
+		g_set_error (error, MIDGARD_GENERIC_ERROR,
+				MGD_ERR_INTERNAL,
 				" %s ",
 				err && err->message ? err->message : "Unknown reason");
-		if (err) 
-			g_propagate_error(error, err);
 		return;
 	}
 	
@@ -133,14 +125,11 @@ static void __get_channel(MidgardBlob *self, const gchar *mode, GError **error)
 	GIOStatus status = g_io_channel_set_encoding(channel,
 			(const gchar *)self->priv->encoding, &err);
 	
-	if(status != G_IO_STATUS_NORMAL) {
-		
-		midgard_set_error(self->priv->mgd,
-				MGD_GENERIC_ERROR,
-				MGD_ERR_USER_DATA,
+	if(status != G_IO_STATUS_NORMAL) {	
+		g_set_error (error, MIDGARD_GENERIC_ERROR,
+				MGD_ERR_INTERNAL,
 				" %s ",
 				err->message);
-		g_propagate_error(error, err);
 		g_io_channel_shutdown(channel, TRUE, NULL);
 		return;
 	}
@@ -194,6 +183,7 @@ midgard_blob_create_blob (MidgardObject *attachment, const gchar *encoding)
  * midgard_blob_read_content:
  * @self: MidgardBlob self instance
  * @bytes_read: (out): number of bytes read
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Returned content should be freed when no longer needed.
  * @bytes_read holds size of returned content. 
@@ -204,30 +194,31 @@ midgard_blob_create_blob (MidgardObject *attachment, const gchar *encoding)
  * 
  * Returns: content of the file, or %NULL on failure
  */ 
-gchar *midgard_blob_read_content(MidgardBlob *self, gsize *bytes_read)
+gchar *midgard_blob_read_content(MidgardBlob *self, gsize *bytes_read, GError **error)
 {
 	g_assert(self != NULL);
 
+	GError *err = NULL;
 	MidgardConnection *mgd = self->priv->mgd;
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
 	*bytes_read = 0;
 
-	__get_filepath(self);
+	__get_filepath(self, &err);
+
+	if (err) {
+		g_propagate_error (error, err);
+		return NULL;
+	}
 
 	if(!self->priv->filepath) {
-		 midgard_set_error(mgd,
-				 MGD_GENERIC_ERROR,
-				 MGD_ERR_USER_DATA,
-				 "Invalid attachment. "
-				 "Can not read file from empty location");
+		 g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_USER_DATA,
+				 "Invalid attachment. Can not read file from empty location");
 		 return NULL;
 	}	
 
 	gchar *content = NULL;
-	GError *err = NULL;
 
 	if (!g_file_get_contents(self->priv->filepath, &content, bytes_read, &err)) {
-		midgard_set_error(self->priv->mgd, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL,
+		g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL,
 				" %s ",	err&& err->message ? err->message : "Unknown reason");
 		if (err)
 			g_clear_error(&err);
@@ -241,33 +232,34 @@ gchar *midgard_blob_read_content(MidgardBlob *self, gsize *bytes_read)
  * midgard_blob_write_content:
  * @self: #MidgardBlob self instance.
  * @content: content which should be written to file.
- * 
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
+ *
  * Write given @content to a file.
  * 
  * Returns: %TRUE if content has been written to file, %FALSE otherwise.
  */ 
-gboolean  midgard_blob_write_content(MidgardBlob *self,	const gchar *content)
+gboolean  midgard_blob_write_content(MidgardBlob *self,	const gchar *content, GError **error)
 {
 	g_assert(self != NULL);
 	g_assert(content != NULL);
 
 	MidgardConnection *mgd = self->priv->mgd;
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
-
-	__get_filepath(self);
+	GError *err = NULL;
 	
-	if(!self->priv->filepath) {
-		midgard_set_error(self->priv->mgd,
-				MGD_GENERIC_ERROR,
-				MGD_ERR_USER_DATA,
-				"Invalid attachment. "
-				"Can not read file from empty location");
+	__get_filepath(self, &err);
+	if (err) {
+		g_propagate_error (error, err);
 		return FALSE;
 	}
 
-	GError *err = NULL;
+	if(!self->priv->filepath) {
+		g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_USER_DATA,
+				"Invalid attachment. Can not read file from empty location");
+		return FALSE;
+	}
+
 	if (!g_file_set_contents(self->priv->filepath, content, -1, &err)) {
-		midgard_set_error(self->priv->mgd, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL,
+		g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL,
 				" %s ", err && err->message ? err->message : "Unknown reason");
 		if (err)
 			g_clear_error(&err);
@@ -298,10 +290,10 @@ GIOChannel *midgard_blob_get_handler(MidgardBlob *self, const gchar *mode, GErro
 	g_assert(self != NULL);
 		
 	MidgardConnection *mgd = self->priv->mgd;
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
-
 	GError *err = NULL;
+
 	__get_channel(self, mode, &err);
+
 	if (err) {
 		g_propagate_error (error, err);
 		return NULL;
@@ -327,9 +319,8 @@ const gchar *midgard_blob_get_path(MidgardBlob *self)
 	g_assert(self != NULL);
 
 	MidgardConnection *mgd = self->priv->mgd;
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
-
-	__get_filepath(self);
+	
+	__get_filepath(self, NULL);
 	if(!self->priv->filepath)
 		return NULL;
 	
@@ -350,22 +341,18 @@ gboolean midgard_blob_exists(MidgardBlob *self)
 	g_assert(self != NULL);
 	
 	MidgardConnection *mgd = self->priv->mgd;
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
-
-	__get_filepath(self);    
+	
+	__get_filepath(self, NULL);    
 	if(!self->priv->filepath)
 		return FALSE; 
 
-	if(g_file_test(self->priv->filepath, G_FILE_TEST_IS_DIR)){
-		
-		midgard_set_error(self->priv->mgd,
-				MGD_GENERIC_ERROR,
-				MGD_ERR_INTERNAL,
-				" '%s' is a directory ", 
-				self->priv->filepath);
+	/* Do we need this?
+	 * if(g_file_test(self->priv->filepath, G_FILE_TEST_IS_DIR)){
+		g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL,
+				" '%s' is a directory ", self->priv->filepath);
 		return FALSE;
 	}
-
+	*/
 
 	return g_file_test(self->priv->filepath, G_FILE_TEST_IS_REGULAR);
 }
@@ -373,6 +360,7 @@ gboolean midgard_blob_exists(MidgardBlob *self)
 /**
  * midgard_blob_remove_file:
  * @self: #MidgardBlob self instance.
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Deletes a file which is associated with blob and located at
  * attachment's location which is initialized for blob.
@@ -385,19 +373,16 @@ gboolean midgard_blob_remove_file(MidgardBlob *self, GError **error)
 {
 	g_assert(self != NULL);
 
-	MidgardConnection *mgd = self->priv->mgd;
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
+	MidgardConnection *mgd = self->priv->mgd;	
 
-	__get_filepath(self);
+	__get_filepath(self, NULL);
 	if(!self->priv->filepath) {
-		MIDGARD_ERRNO_SET(self->priv->mgd, MGD_ERR_INTERNAL);
 		g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL, 
 				"Can not delete '%s'. No file location", self->priv->filepath);
 		return FALSE;
 	}
 	
 	if(!midgard_blob_exists(self)) {
-		MIDGARD_ERRNO_SET(self->priv->mgd, MGD_ERR_INTERNAL);
 		g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL,
 				"Can not delete '%s'. File doesn't exists", self->priv->filepath);	
 		return FALSE;
@@ -409,7 +394,6 @@ gboolean midgard_blob_remove_file(MidgardBlob *self, GError **error)
 		return TRUE;
 
 	g_set_error (error, MGD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Can not delete '%s'. Unknown reason", self->priv->filepath);
-	MIDGARD_ERRNO_SET(self->priv->mgd, MGD_ERR_INTERNAL);
 
 	return FALSE;
 }
@@ -427,7 +411,6 @@ _midgard_blob_constructor (GType type,
 		G_OBJECT_CLASS (parent_class)->constructor (type,
 				n_construct_properties,
 				construct_properties);
-
 	MidgardBlob *self = MIDGARD_BLOB(object);
 	if (self->priv->attachment)
 		self->priv->mgd = MGD_OBJECT_CNC (self->priv->attachment);
@@ -439,10 +422,7 @@ _midgard_blob_constructor (GType type,
 
 	const gchar *blobdir = self->priv->mgd->priv->config->blobdir;
 	if (!g_file_test(blobdir,G_FILE_TEST_EXISTS)) {
-		midgard_set_error(self->priv->mgd,
-				MGD_GENERIC_ERROR,
-				MGD_ERR_INTERNAL,
-				" Blobs directory doesn't exist. %s", blobdir);
+		g_warning("Blobs directory doesn't exist. %s", blobdir);
 		return NULL;
 	}
 
@@ -454,7 +434,7 @@ _midgard_blob_constructor (GType type,
 	self->priv->blobdir = g_strdup(blobdir);
 	self->priv->channel = NULL;
 	
-	__get_filepath(self);
+	__get_filepath(self, NULL);
 
 	if(self->priv->filepath == NULL) {		
 		g_critical("File path not found");

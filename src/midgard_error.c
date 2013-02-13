@@ -23,19 +23,26 @@
 #include <unistd.h>
 
 /**
- * midgard_error_generic:
+ * midgard_error:
  *
  * GQuark for Midgard Error. It's used by Midgard Error implementation, and 
  * probably not needed to use by any application.
  *
  * Returns: MGD_GENERIC_ERROR GQuark
  */
-GQuark midgard_error_generic(void)
+GQuark 
+midgard_error (void)
 {
 	static GQuark q = 0;
 	if (q == 0)
 		q = g_quark_from_static_string ("midgard-generic-error-quark");
 	return q;
+}
+
+GQuark
+midgard_error_generic (void)
+{
+	return midgard_error();
 }
 
 /**
@@ -174,79 +181,6 @@ static gchar* _midgard_error_format(const gchar *msg, va_list args)
 		g_strdup_vprintf(msg, args);
 
 	return new_string;
-}
-
-/**
- * midgard_set_error:
- * @mgd: #MidgardConnection instance 
- * @domain: GQuark which represents MidgardError domain
- * @errcode: #MidgardErrorGeneric enum value
- * @msg: a message which should be appended to string represented by errcode
- * @...: message argument list ( if required )
- *
- * This function sets internal error constant, and creates new error message.
- * User defined message is appended to internal one.
- * Any message created by application ( and its corresponding constant ) are destroyed 
- * and reset to MGD_ERR_OK when any API function is invoked.
- * Second @domain parameter is optional , and can be safely defined as NULL for 
- * MGD_GENERIC_ERROR domain.
- *
- * <example>
- * <programlisting>
- *	
- *	void set_wrong_property(MidgardConnection *mgd, gchar *prop)
- *	{
- *		midgard_set_error(mgd, NULL, 
- *				MGD_ERR_INVALID_PROPERTY_VALUE,
- *				"My application doesn't accept %s property",
- *				prop);
- *	}
- * </programlisting>
- * </example>
- */ 
-void midgard_set_error(
-		MidgardConnection *mgd, GQuark domain, gint errcode, const gchar *msg, ...)
-{
-	g_assert(mgd != NULL);
-
-	if(!domain) 
-		domain = MGD_GENERIC_ERROR;
-
-	static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
-	g_static_mutex_lock (&mutex);
-
-	if(mgd->errstr)
-		g_free(mgd->errstr);
-
-	if(mgd->err)
-		g_clear_error(&mgd->err);
-
-	gchar *new_msg;
-	va_list args;
-
-	va_start(args, msg);
-	new_msg =  _midgard_error_format(msg, args);
-	va_end(args);	
-
-	g_clear_error(&mgd->err);
-
-	/* watch out! midgard 1.7 and midcom needs MGD_ERR_OK string.
-	 * Keep string formatters together */
-	g_set_error(&mgd->err, domain, errcode,
-			"%s%s", 
-			midgard_error_string(domain, errcode),
-			new_msg);
-	g_free(new_msg);
-
-	mgd->errnum = errcode;
-	if(!mgd->err->message)
-		mgd->errstr = g_strdup("");
-	else
-		mgd->errstr = g_strdup(mgd->err->message);	
-
-	g_static_mutex_unlock (&mutex);
-
-	return;		
 }
 
 /**

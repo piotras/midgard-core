@@ -44,8 +44,8 @@ typedef struct _MidgardBlobPrivate MidgardBlobPrivate;
 struct _MidgardBlobClass {
 	GObjectClass parent;
 
-	gchar *(*read_content) (MidgardBlob *self, gsize *bytes_read);
-	gboolean (*write_content) (MidgardBlob *self, const gchar *content);
+	gchar *(*read_content) (MidgardBlob *self, gsize *bytes_read, GError **error);
+	gboolean (*write_content) (MidgardBlob *self, const gchar *content, GError **error);
 	gboolean (*remove_file) (MidgardBlob *self, GError **error);
 	gboolean (*exists) (MidgardBlob *self);
 	const gchar *(*get_path) (MidgardBlob *self);
@@ -61,8 +61,8 @@ struct _MidgardBlob {
 GType 		midgard_blob_get_type		(void);
 MidgardBlob 	*midgard_blob_new		(MidgardObject *attachment, const gchar *encoding);
 MidgardBlob 	*midgard_blob_create_blob	(MidgardObject *attachment, const gchar *encoding);
-gchar 		*midgard_blob_read_content	(MidgardBlob *self, gsize *bytes_read);
-gboolean 	midgard_blob_write_content	(MidgardBlob *self, const gchar *content);
+gchar 		*midgard_blob_read_content	(MidgardBlob *self, gsize *bytes_read, GError **error);
+gboolean 	midgard_blob_write_content	(MidgardBlob *self, const gchar *content, GError **error);
 GIOChannel 	*midgard_blob_get_handler	(MidgardBlob *self, const gchar *mode, GError **error);
 const gchar 	*midgard_blob_get_path		(MidgardBlob *self);
 gboolean 	midgard_blob_exists		(MidgardBlob *self);

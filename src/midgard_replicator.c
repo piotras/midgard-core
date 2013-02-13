@@ -323,7 +323,7 @@ midgard_replicator_serialize_blob (MidgardObject *object)
 		return NULL;
 	
 	gsize bytes_read = 0;
-	gchar *content = midgard_blob_read_content(blob, &bytes_read);
+	gchar *content = midgard_blob_read_content(blob, &bytes_read, NULL);
 	
 	if(!content) {
 		g_object_unref(blob);
@@ -389,6 +389,7 @@ midgard_replicator_unserialize (MidgardConnection *mgd, const gchar *xml, gboole
  * midgard_replicator_import_object:
  * @object: #MidgardDBObject instance
  * @force: toggle to force import
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Imports given object to underlying storage
  *
@@ -413,7 +414,7 @@ midgard_replicator_unserialize (MidgardConnection *mgd, const gchar *xml, gboole
  * Returns: %TRUE on success, %FALSE otherwise
  */ 
 gboolean 
-midgard_replicator_import_object (MidgardDBObject *object, gboolean force)
+midgard_replicator_import_object (MidgardDBObject *object, gboolean force, GError **error)
 {	
 	MidgardConnection *mgd = MGD_OBJECT_CNC (object);
 	const gchar *guid = MGD_OBJECT_GUID (object);
@@ -421,18 +422,17 @@ midgard_replicator_import_object (MidgardDBObject *object, gboolean force)
 	g_return_val_if_fail (mgd != NULL, FALSE);
 	g_return_val_if_fail (g_type_is_a (G_OBJECT_TYPE (object), MIDGARD_TYPE_DBOBJECT), FALSE);
 
-	MIDGARD_ERRNO_SET(object->dbpriv->mgd, MGD_ERR_OK);
 	gboolean ret_val = FALSE;
 
 	if (guid == NULL || (guid && *guid == '\0')) {		
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INVALID_PROPERTY_VALUE, "NULL or empty guid");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "NULL or empty guid");
 		return ret_val;
 	}
 
 	MidgardMetadata *dbmetadata = NULL;
 	MidgardMetadata *metadata = MGD_DBOBJECT_METADATA (object);
 	if (!metadata) {
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_NO_METADATA, "Metadata class not available.");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NO_METADATA, "Metadata class not available.");
 		return ret_val;
 	}
 
@@ -485,13 +485,13 @@ midgard_replicator_import_object (MidgardDBObject *object, gboolean force)
 			midgard_core_query_execute (MGD_OBJECT_CNC (object), sql->str, TRUE);
 			g_string_free (sql, TRUE);
 			
-			ret_val =  _midgard_object_create (MIDGARD_OBJECT (object), MGD_OBJECT_GUID (object), OBJECT_UPDATE_IMPORTED);		
+			ret_val =  _midgard_object_create (MIDGARD_OBJECT (object), MGD_OBJECT_GUID (object), OBJECT_UPDATE_IMPORTED, error);		
 			return ret_val;
 		}
 
 		if (mgd->errnum == MGD_ERR_NOT_EXISTS || mgd->errnum == MGD_ERR_OK) {
 
-			ret_val =  _midgard_object_create (MIDGARD_OBJECT(object), MGD_OBJECT_GUID(object), OBJECT_UPDATE_IMPORTED);
+			ret_val =  _midgard_object_create (MIDGARD_OBJECT(object), MGD_OBJECT_GUID(object), OBJECT_UPDATE_IMPORTED, error);
 			return ret_val;
 		}
 
@@ -568,7 +568,7 @@ midgard_replicator_import_object (MidgardDBObject *object, gboolean force)
 			
 			/* Database object is more recent or exactly the same */	
 			g_object_unref (dbobject);	
-			MIDGARD_ERRNO_SET (mgd, MGD_ERR_OBJECT_IMPORTED);
+			g_set_error(error, MIDGARD_GENERIC_ERROR, MGD_ERR_OBJECT_IMPORTED, NULL);
 	
 			return FALSE;
 
@@ -582,7 +582,7 @@ midgard_replicator_import_object (MidgardDBObject *object, gboolean force)
 			 * * we delete object from database */
 			if (deleted) {
 
-				ret = midgard_object_delete (dbobject, FALSE);
+				ret = midgard_object_delete (dbobject, FALSE, error);
 				g_object_unref (dbobject);
 				return ret;
 			}
@@ -598,13 +598,12 @@ midgard_replicator_import_object (MidgardDBObject *object, gboolean force)
 			g_object_get (G_OBJECT (metadata), "deleted", &undelete, NULL);
 
 			if ((deleted && !undelete)) {
-				midgard_schema_object_factory_object_undelete (mgd, MGD_OBJECT_GUID (dbobject));
+				midgard_schema_object_factory_object_undelete (mgd, MGD_OBJECT_GUID (dbobject), error);
 				goto _update_object;
 			}
 
 			if (deleted && !force) {
-				
-				MIDGARD_ERRNO_SET (mgd, MGD_ERR_OBJECT_DELETED);
+				g_set_error(error, MIDGARD_GENERIC_ERROR, MGD_ERR_OBJECT_DELETED, NULL);
 				g_object_unref (dbobject);
 				return FALSE;
 			}
@@ -622,33 +621,32 @@ midgard_replicator_import_object (MidgardDBObject *object, gboolean force)
 
 static gboolean __import_blob_from_xml(	MidgardConnection *mgd,
 					xmlDoc *doc, 
-					xmlNode *node)
+					xmlNode *node, GError **error)
 {
 	gchar *content;
 	struct stat statbuf;
 	const gchar *guid = (const gchar *)xmlGetProp(node, BAD_CAST "guid");
 
 	if (!guid) {
-		MIDGARD_ERRNO_SET(mgd, MGD_ERR_INTERNAL);
-		g_warning("Object's guid is empty. Can not import blob file.");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Object's guid is empty. Can not import blob file.");
 		g_free((gchar *)guid);
 		xmlFreeDoc(doc);
 		return FALSE;
 	}
 
 	if (!midgard_is_guid((const gchar *)guid)) {
-		MIDGARD_ERRNO_SET(mgd, MGD_ERR_INTERNAL);
-		g_warning("'%s' is not a valid guid", guid);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "'%s' is not a valid guid", guid);
 		g_free((gchar *)guid);
 		xmlFreeDoc(doc);
 		return FALSE;
 	}
 
-	MidgardObject *object = midgard_schema_object_factory_get_object_by_guid (mgd, guid);
+	GError *err = NULL;
+	MidgardObject *object = midgard_schema_object_factory_get_object_by_guid (mgd, guid, &err);
 
-	/* TODO , Add more error messages to inform about object state. 
-	 * One is already set by midgard_object_class_get_object_by_guid */
 	if (!object) {
+		if (err)
+			g_propagate_error(error, err);
 		g_free((gchar *)guid);
 		xmlFreeDoc(doc);
 		return FALSE;
@@ -660,7 +658,7 @@ static gboolean __import_blob_from_xml(	MidgardConnection *mgd,
 	if (!blobdir || (*blobdir != '/')
 			|| (stat(blobdir, &statbuf) != 0)
 			|| !S_ISDIR(statbuf.st_mode)) {
-		g_warning("Blobs directory is not set");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Blobs directory is not set");
 		g_free((gchar *)guid);
 		xmlFreeDoc(doc);
 		return FALSE;
@@ -707,13 +705,14 @@ static gboolean __import_blob_from_xml(	MidgardConnection *mgd,
  * @mgd: #MidgardConnection instance
  * @xml: data buffer which holds serialized object
  * @force: toggle to force import
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * This method tries to import all objects which could be unserialized from gievn xml.
  * It's not atomic. Check error code returned from midgard_connection_get_error().
  *
  */ 
 void 
-midgard_replicator_import_from_xml (MidgardConnection *mgd,  const gchar *xml, gboolean force)
+midgard_replicator_import_from_xml (MidgardConnection *mgd,  const gchar *xml, gboolean force, GError **error)
 {
 	g_return_if_fail (mgd != NULL);
 	g_return_if_fail (xml != NULL);
@@ -727,7 +726,7 @@ midgard_replicator_import_from_xml (MidgardConnection *mgd,  const gchar *xml, g
 
 	xmlNodePtr child = _get_type_node(root_node->children);
 	if(!child) {
-		g_warning("Can not get midgard type name from the given xml");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Can not get midgard type name from the given xml");
 		xmlFreeDoc(doc);
 		return;
 	}
@@ -736,28 +735,32 @@ midgard_replicator_import_from_xml (MidgardConnection *mgd,  const gchar *xml, g
 	
 	if(object_type == MIDGARD_TYPE_BLOB) {
 		/* it will destroy xmlDoc */
-		__import_blob_from_xml(mgd, doc, child);
+		__import_blob_from_xml(mgd, doc, child, error);
 		return;
 	}
 
 	xmlChar *attr, *guid_attr;
 	MidgardObject *dbobject;
+	GError *err = NULL;
 
-	for(; child; child = _get_type_node(child->next)) {
+	for (; child; child = _get_type_node(child->next)) {
 		
 		attr = xmlGetProp(child, BAD_CAST "purge");
 		guid_attr = xmlGetProp(child, BAD_CAST "guid");
 
 		if(attr && g_str_equal(attr, "yes")) {
 			
-			dbobject = midgard_schema_object_factory_get_object_by_guid (mgd, (const gchar *)guid_attr);
+			dbobject = midgard_schema_object_factory_get_object_by_guid (mgd, (const gchar *)guid_attr, &err);
 
 			if(dbobject || 
 					( !dbobject && 
-					 (mgd->errnum == MGD_ERR_OBJECT_DELETED)
+					 (err->domain == MIDGARD_GENERIC_ERROR
+					  && err->code == MGD_ERR_OBJECT_DELETED)
 					 )) {
 		
-				midgard_object_purge(dbobject, FALSE);
+				if (err)
+					g_clear_error (&err);
+				midgard_object_purge(dbobject, FALSE, NULL);
 				if(dbobject)
 					g_object_unref(dbobject);
 				xmlFree(attr);
@@ -769,7 +772,7 @@ midgard_replicator_import_from_xml (MidgardConnection *mgd,  const gchar *xml, g
 		xmlFree(attr);
 
 		MidgardObject *object =
-			midgard_object_new(mgd, (const gchar *)child->name, NULL);
+			midgard_object_new(mgd, (const gchar *)child->name, NULL, NULL);
 		if(!object) {
 			g_warning("Can not create %s instance", child->name);
 			xmlFreeDoc(doc);
@@ -782,14 +785,13 @@ midgard_replicator_import_from_xml (MidgardConnection *mgd,  const gchar *xml, g
 			MGD_OBJECT_GUID (object) = (const gchar *)g_strdup((gchar *)guid_attr);
 		}
 
-		if(!_nodes2object(G_OBJECT(object), child->children, force)) {
+		if(!_nodes2object(G_OBJECT(object), child->children, force, NULL)) {
 			xmlFree(guid_attr);
 			g_object_unref(object);
 			continue;
 		}			
 		
-		if (!midgard_replicator_import_object (MIDGARD_DBOBJECT (object), force)) {
-
+		if (!midgard_replicator_import_object (MIDGARD_DBOBJECT (object), force, NULL)) {
 			xmlFree (guid_attr);
 			g_object_unref (object);
 			continue;

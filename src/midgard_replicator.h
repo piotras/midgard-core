@@ -70,7 +70,7 @@ gchar 			*midgard_replicator_export_blob		(MidgardObject *object);
 gboolean 		midgard_replicator_export_by_guid 	(MidgardConnection *mgd, const gchar *guid);
 gchar 			*midgard_replicator_export_media	(MidgardObject *object);
 GObject 		**midgard_replicator_unserialize	(MidgardConnection *mgd, const gchar *xml, gboolean force);
-gboolean 		midgard_replicator_import_object	(MidgardDBObject *object, gboolean force);
-void 			midgard_replicator_import_from_xml	(MidgardConnection *mgd, const gchar *xml, gboolean force);
+gboolean 		midgard_replicator_import_object	(MidgardDBObject *object, gboolean force, GError **error);
+void 			midgard_replicator_import_from_xml	(MidgardConnection *mgd, const gchar *xml, gboolean force, GError **error);
 
 #endif /* MIDGARD_REPLICATOR_H */

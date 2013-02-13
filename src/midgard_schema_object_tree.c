@@ -317,6 +317,7 @@ midgard_schema_object_tree_get_parent_name (MidgardObject *object)
 /**
  * midgard_schema_object_tree_get_parent_object:
  * @object: #MidgardObject instance
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Get tree parent object, of the given @object.
  *
@@ -324,7 +325,7 @@ midgard_schema_object_tree_get_parent_name (MidgardObject *object)
  * Since: 10.05
  */ 
 MidgardObject*
-midgard_schema_object_tree_get_parent_object (MidgardObject *object)
+midgard_schema_object_tree_get_parent_object (MidgardObject *object, GError **error)
 {
 	g_return_val_if_fail (object != NULL, NULL);
 
@@ -352,7 +353,7 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object)
 			parent_class_name = midgard_reflector_property_get_link_name (mrp, property_up);
    
 			if (parent_class_name)
-				pobj = midgard_object_new (mgd, parent_class_name, NULL);
+				pobj = midgard_object_new (mgd, parent_class_name, NULL, error);
 
 			g_object_unref (mrp);
 		}	
@@ -374,7 +375,7 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object)
 				if ((pcstring = g_value_get_string(&pval)) != NULL) {
 					
 					ret_object = TRUE;
-					if (!midgard_object_get_by_guid(pobj, pcstring)) {
+					if (!midgard_object_get_by_guid(pobj, pcstring, error)) {
 						g_object_unref(pobj);
 						pobj = NULL;
 					}
@@ -386,7 +387,7 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object)
 				if ((puint = g_value_get_uint(&pval))) {
 
 					ret_object = TRUE;
-					if (!midgard_object_get_by_id(pobj, puint)) {
+					if (!midgard_object_get_by_id(pobj, puint, error)) {
 						g_object_unref(pobj);
 						pobj = NULL;
 					}
@@ -399,7 +400,7 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object)
 				if ((pint = g_value_get_int(&pval))) {
 
 					ret_object = TRUE;
-					if (!midgard_object_get_by_id(pobj, pint)) {
+					if (!midgard_object_get_by_id(pobj, pint, error)) {
 						g_object_unref(pobj);
 						pobj = NULL;
 					}
@@ -429,7 +430,7 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object)
 	if (!parent_class_name)
 		return NULL;
 
-	pobj =  midgard_object_new(MGD_OBJECT_CNC (self) , MIDGARD_DBOBJECT (mobj)->dbpriv->storage_data->parent, NULL);
+	pobj =  midgard_object_new(MGD_OBJECT_CNC (self) , MIDGARD_DBOBJECT (mobj)->dbpriv->storage_data->parent, NULL, error);
 	
 	if (pobj == NULL)
 		return NULL;
@@ -451,7 +452,7 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object)
 		    
 		    if ((pcstring = g_value_get_string(&pval)) != NULL) {
 			    
-			    if (!midgard_object_get_by_guid(pobj, pcstring)) {
+			    if (!midgard_object_get_by_guid(pobj, pcstring, error)) {
 				    g_object_unref(pobj);
 				    pobj = NULL;
 			    }
@@ -462,7 +463,7 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object)
 		    
 		    if ((puint = g_value_get_uint(&pval))) {
 
-			    if (!midgard_object_get_by_id(pobj, puint)) {
+			    if (!midgard_object_get_by_id(pobj, puint, error)) {
 				    g_object_unref(pobj);
 				    pobj = NULL;
 			    }
@@ -472,15 +473,12 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object)
 	    case G_TYPE_INT:
 		    
 		    if ((pint = g_value_get_int(&pval))) {
-
-			    if (!midgard_object_get_by_id(pobj, pint)) {
+			    if (!midgard_object_get_by_id(pobj, pint, error)) {
 				    g_object_unref(pobj);
 				    pobj = NULL;
 			    }
 		    }
 		    break;
-
-
         }
         
         g_value_unset(&pval);

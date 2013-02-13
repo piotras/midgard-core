@@ -45,7 +45,7 @@ static void _test_me(MidgardConnection *mgd, MidgardObject *object)
 	}
 	
 	/* Test create */
-	if (midgard_object_create(object)){
+	if (midgard_object_create(object, NULL)){
 		
 		g_message("Object '%s' create : OK", typename);
 		
@@ -84,7 +84,7 @@ static void _test_me(MidgardConnection *mgd, MidgardObject *object)
 					typename);
 
 		/* Test update */
-		if (!midgard_object_update(object)) {
+		if (!midgard_object_update(object, NULL)) {
 			
 			g_warning("Failed to update object %s",	typename);
 		
@@ -100,7 +100,7 @@ static void _test_me(MidgardConnection *mgd, MidgardObject *object)
 		gchar *guid;
 		g_object_get(G_OBJECT(object), "guid", &guid, NULL);
 		g_value_set_string(&gval, guid);
-		MidgardObject *new = midgard_object_new(mgd, typename, &gval);
+		MidgardObject *new = midgard_object_new(mgd, typename, &gval, NULL);
 		g_value_unset(&gval);
 		
 		if (new == NULL) {
@@ -115,7 +115,7 @@ static void _test_me(MidgardConnection *mgd, MidgardObject *object)
 		
 		g_free(guid);
 
-		if (midgard_object_delete(object, TRUE)) {
+		if (midgard_object_delete(object, TRUE, NULL)) {
 
 			g_message("Object '%s' delete : OK", typename);
 
@@ -206,14 +206,14 @@ main (int argc, char **argv)
 		typename = g_type_name(all_types[i]);
 
 		if (g_str_equal(typename, "midgard_parameter")) {
-			MidgardObject *param = midgard_object_new(mgd, typename, NULL);
+			MidgardObject *param = midgard_object_new(mgd, typename, NULL, NULL);
 			g_object_unref(param);
 			g_message("midgard_parameter ignored");
 			continue;
 		}
 
 		g_message("Type %s", typename);
-		MidgardObject *object = midgard_object_new(mgd, typename, NULL);
+		MidgardObject *object = midgard_object_new(mgd, typename, NULL, NULL);
 
 		/* Create tables */
 		if (tablecreate) 

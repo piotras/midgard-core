@@ -52,17 +52,20 @@ _midgard_sql_content_manager_job_update_executable_iface_execute (MidgardExecuta
 	MidgardContentManagerJob *job = MIDGARD_CONTENT_MANAGER_JOB (iface);
 	MidgardObject *content_object = (MidgardObject *) midgard_content_manager_job_get_content_object (job, &err);
 
+	if (err) {
+		g_propagate_error (error, err);
+		midgard_core_sql_content_manager_job_failed (job_sql);
+		return;
+	}
+
 	/* Get connection, it should be validated already */
 	MidgardConnection *mgd = midgard_sql_content_manager_job_get_connection (job_sql, NULL);
 
 	/* Update object */
-	if (midgard_object_update (content_object) == FALSE) {
-		g_set_error (error, 
-				MIDGARD_EXECUTION_ERROR, 
-				MIDGARD_EXECUTION_ERROR_INTERNAL, 
-				"%s",
-				midgard_connection_get_error_string (mgd));
-				failed = TRUE;	
+	midgard_object_update (content_object, &err);
+	if (err) {
+		g_propagate_error (error, err);
+		failed = TRUE;
 	}
 
 	midgard_executable_execution_end (iface);
@@ -107,12 +110,19 @@ _midgard_sql_content_manager_job_update_executable_iface_execute_async (MidgardE
 	MidgardContentManagerJob *job = MIDGARD_CONTENT_MANAGER_JOB (iface);
 	MidgardObject *content_object = (MidgardObject *) midgard_content_manager_job_get_content_object (job, &err);
 
+	if (err) {
+		g_propagate_error (error, err);
+		midgard_core_sql_content_manager_job_failed (job_sql);
+		return;
+	}
+
 	/* Get connection, it should be validated already */
 	MidgardConnection *mgd = midgard_sql_content_manager_job_get_connection (job_sql, NULL);
 
 	/* Update object */
-	gboolean rv =  _midgard_object_update (content_object, OBJECT_UPDATE_NONE, NULL);
-	/* TODO, handle error */
+	gboolean rv =  _midgard_object_update (content_object, OBJECT_UPDATE_NONE, &err);
+	if (err)
+		g_propagate_error (error, err);
 
 	/* signal emission idle */
 	g_idle_add_full (G_PRIORITY_HIGH_IDLE, (GSourceFunc) execution_end_func, g_object_ref (iface), NULL);

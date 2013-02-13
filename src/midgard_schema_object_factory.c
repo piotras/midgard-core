@@ -30,6 +30,7 @@
  * midgard_schema_object_factory_get_object_by_guid:
  * @mgd: #MidgardConnection instance
  * @guid: guid which identifies object to look for 
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  * 
  * Creates new instance of the class defined in Midgard Schema.
  *
@@ -56,31 +57,28 @@
  * Since: 10.05
  */ 
 MidgardObject*
-midgard_schema_object_factory_get_object_by_guid (MidgardConnection *mgd, const gchar *guid)
+midgard_schema_object_factory_get_object_by_guid (MidgardConnection *mgd, const gchar *guid, GError **error)
 {
 	g_return_val_if_fail (mgd != NULL, NULL);
 	g_return_val_if_fail (guid != NULL, NULL);
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
 	if (!midgard_is_guid (guid)) {
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_NOT_EXISTS);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
 		return NULL;
 	}
 
 	MidgardObject *object = NULL;
 
 	MidgardDBObject *repligard = NULL;
-	GError *error = NULL;
+	GError *err = NULL;
 	GValue gval = {0, };
 	g_value_init (&gval, G_TYPE_STRING);
 	g_value_set_string (&gval, guid);
-	midgard_core_query_get_object (mgd, g_type_name (MIDGARD_TYPE_REPLIGARD), &repligard, FALSE, &error, "reference", &gval, NULL);
+	midgard_core_query_get_object (mgd, g_type_name (MIDGARD_TYPE_REPLIGARD), &repligard, FALSE, &err, "reference", &gval, NULL);
 	g_value_unset (&gval);
 	
-	if (error) {
-		MIDGARD_ERRNO_SET_STRING (mgd, error->code, "%s", error->message);
-		g_clear_error (&error);
+	if (err) {
+		g_propagate_error (error, err);
 		if (repligard)
 			g_object_unref (G_OBJECT (repligard));
 		return FALSE;
@@ -101,20 +99,20 @@ midgard_schema_object_factory_get_object_by_guid (MidgardConnection *mgd, const 
 	switch (action) {
 
 		case MGD_OBJECT_ACTION_DELETE:
-			MIDGARD_ERRNO_SET (mgd, MGD_ERR_OBJECT_DELETED);
+			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_OBJECT_DELETED, NULL);
 			break;
 	
 		case MGD_OBJECT_ACTION_PURGE:
-			MIDGARD_ERRNO_SET (mgd, MGD_ERR_OBJECT_PURGED);
+			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_OBJECT_PURGED, NULL);
 			break;
 
 		default:
 			g_value_init(&gval, G_TYPE_STRING);
     			g_value_set_string (&gval, guid);
-			object = midgard_object_new (mgd, classname, &gval);
+			object = midgard_object_new (mgd, classname, &gval, &err);
 	   		g_value_unset (&gval);
 			if (!object) {
-				MIDGARD_ERRNO_SET (mgd, MGD_ERR_NOT_EXISTS);
+				g_propagate_error(error, err);
 		       	}
 			break;
 	}
@@ -177,6 +175,7 @@ __get_id_from_path_element (MidgardConnection *mgd,
  * @mgd: #MidgardConnection instance
  * @classname: name of the class, new instance should be created for
  * @path: path which identifies object
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Get object by path. Path elements are objects' names.
  * To get top object with empty name use "/" path. 
@@ -199,7 +198,7 @@ __get_id_from_path_element (MidgardConnection *mgd,
  * Since: 10.05
  */ 
 MidgardObject*
-midgard_schema_object_factory_get_object_by_path (MidgardConnection *mgd, const gchar *classname, const gchar *path)
+midgard_schema_object_factory_get_object_by_path (MidgardConnection *mgd, const gchar *classname, const gchar *path, GError **error)
 {
 	g_return_val_if_fail (mgd != NULL, NULL);
 	g_return_val_if_fail (classname != NULL, NULL);
@@ -212,8 +211,6 @@ midgard_schema_object_factory_get_object_by_path (MidgardConnection *mgd, const 
 		/* TODO, add error */
 		return NULL;
 	}
-
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
 
 	gchar *object_path = NULL;
 	
@@ -253,7 +250,7 @@ midgard_schema_object_factory_get_object_by_path (MidgardConnection *mgd, const 
 		if(plist->data == NULL) {
 			g_strfreev (pelts);
 			g_list_free (plist);
-			MIDGARD_ERRNO_SET(mgd, MGD_ERR_NOT_EXISTS);
+			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
 			return NULL;
 		}
 
@@ -266,7 +263,7 @@ midgard_schema_object_factory_get_object_by_path (MidgardConnection *mgd, const 
 		if (!property_parent && !property_up) {
 			g_strfreev (pelts);
 			g_list_free (plist);
-			MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INTERNAL, "%s doesn't support tree functionality", _cname);
+			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "%s doesn't support tree functionality", _cname);
 			return NULL;
 		}
 	
@@ -278,7 +275,7 @@ midgard_schema_object_factory_get_object_by_path (MidgardConnection *mgd, const 
 		if (!namespec || !idspec) {
 			g_strfreev (pelts);
 			g_list_free (plist);
-    			MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INTERNAL, "%s class has no 'name' or 'id' member registered", _cname);
+    			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "%s class has no 'name' or 'id' member registered", _cname);
 			return NULL;
 		}
 
@@ -311,7 +308,10 @@ _GET_NEXT_PATH_ELEMENT:
 			GValue idval = {0, };
 			g_value_init (&idval, G_TYPE_UINT);
 			g_value_set_uint (&idval, _oid);
-			MidgardObject *object = midgard_object_new (mgd, _cname, &idval);
+			GError *err = NULL;
+			MidgardObject *object = midgard_object_new (mgd, _cname, &idval, &err);
+			if (err)
+				g_propagate_error (error, err);
  			g_value_unset (&idval);
 			g_list_free (plist);
 			g_strfreev (pelts);
@@ -324,7 +324,7 @@ _GET_NEXT_PATH_ELEMENT:
 	if (plist)
 		g_list_free (plist);
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_NOT_EXISTS);
+	g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
  	return NULL;
 }
 
@@ -332,6 +332,7 @@ _GET_NEXT_PATH_ELEMENT:
  * midgard_schema_object_factory_object_undelete:
  * @mgd: #MidgardConnection instance
  * @guid: guid which identifies object to undelete
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  * 
  * Cases to return %FALSE:
  * <itemizedlist>
@@ -353,7 +354,7 @@ _GET_NEXT_PATH_ELEMENT:
  * Since: 10.05
  */ 
 gboolean	
-midgard_schema_object_factory_object_undelete (MidgardConnection *mgd, const gchar *guid)
+midgard_schema_object_factory_object_undelete (MidgardConnection *mgd, const gchar *guid, GError **error)
 {
 	g_return_val_if_fail (mgd != NULL, FALSE);
 	g_return_val_if_fail (guid != NULL, FALSE);
@@ -362,19 +363,16 @@ midgard_schema_object_factory_object_undelete (MidgardConnection *mgd, const gch
 	gint rv;
 	gboolean ret;
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
 	MidgardDBObject *repligard = NULL;
-	GError *error = NULL;
+	GError *err = NULL;
 	GValue gval = {0, };
 	g_value_init (&gval, G_TYPE_STRING);
 	g_value_set_string (&gval, guid);
-	midgard_core_query_get_object (mgd, g_type_name (MIDGARD_TYPE_REPLIGARD), &repligard, FALSE, &error, "guid", &gval, NULL);
+	midgard_core_query_get_object (mgd, g_type_name (MIDGARD_TYPE_REPLIGARD), &repligard, FALSE, &err, "guid", &gval, NULL);
 	g_value_unset (&gval);
 	
-	if (error) {
-		MIDGARD_ERRNO_SET_STRING (mgd, error->code, "%s", error->message);
-		g_clear_error (&error);
+	if (err) {
+		g_propagate_error (error, err);
 		if (repligard)
 			g_object_unref (G_OBJECT (repligard));
 		return FALSE;
@@ -394,7 +392,7 @@ midgard_schema_object_factory_object_undelete (MidgardConnection *mgd, const gch
 			const gchar *tablename = midgard_core_class_get_table (MIDGARD_DBOBJECT_CLASS(klass));
 			const gchar *deleted_field = midgard_core_object_get_deleted_field (MIDGARD_DBOBJECT_CLASS (klass));
 			if (!deleted_field) {
-				MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INVALID_PROPERTY, 
+				g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY, 
 						"Object identified by %s guid doesn't provide 'metadata' or 'deleted' property", guid);
 				return FALSE;
 			}
@@ -410,7 +408,7 @@ midgard_schema_object_factory_object_undelete (MidgardConnection *mgd, const gch
 			g_string_free (sql, TRUE);
 
 			if (rv == 0 || rep_rv == 0) { 
-  				MIDGARD_ERRNO_SET (mgd, MGD_ERR_INTERNAL);
+  				g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, NULL);
 			}
 			else {
 				ret = TRUE;
@@ -418,11 +416,11 @@ midgard_schema_object_factory_object_undelete (MidgardConnection *mgd, const gch
 			break;
 
 		case MGD_OBJECT_ACTION_PURGE:
-			MIDGARD_ERRNO_SET (mgd, MGD_ERR_OBJECT_PURGED);
+			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_OBJECT_PURGED, NULL);
 			break;
 
 		case MGD_OBJECT_ACTION_NONE:
-	   		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_USER_DATA, "Object identified by %s guid is not deleted", guid);
+	   		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_USER_DATA, "Object identified by %s guid is not deleted", guid, NULL);
 			break;
 	}
 
@@ -436,6 +434,7 @@ midgard_schema_object_factory_object_undelete (MidgardConnection *mgd, const gch
  * @mgd: #MidgardConnection instance
  * @classname: name of the class created object is instance of
  * @value: value which holds object's identifier
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Check midgard_object_new() for returned value and possible errors.
  *
@@ -443,12 +442,12 @@ midgard_schema_object_factory_object_undelete (MidgardConnection *mgd, const gch
  * Since: 10.05.1
  */ 
 MidgardObject*  
-midgard_schema_object_factory_create_object(MidgardConnection *mgd, const gchar *classname, GValue *value)
+midgard_schema_object_factory_create_object(MidgardConnection *mgd, const gchar *classname, GValue *value, GError **error)
 {
 	g_return_val_if_fail (mgd != NULL, NULL);
 	g_return_val_if_fail (classname != NULL, NULL);
 
-	return midgard_object_new (mgd, classname, value);
+	return midgard_object_new (mgd, classname, value, error);
 }
 
 /* GOBJECT ROUTINES */

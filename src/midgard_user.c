@@ -119,7 +119,7 @@ midgard_user_new (MidgardConnection *mgd, guint n_params, const GParameter *para
 }
 
 static gboolean 
-__validate_parameters (MidgardConnection *mgd, guint n_params, const GParameter *parameters, guint valid)
+__validate_parameters (MidgardConnection *mgd, guint n_params, const GParameter *parameters, guint valid, GError **error)
 {
 	guint i;
 	const gchar *pname;
@@ -136,8 +136,7 @@ __validate_parameters (MidgardConnection *mgd, guint n_params, const GParameter 
 	}
 
 	if (pvalid < valid) {
-
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_INVALID_PROPERTY_VALUE);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, NULL);
 		return FALSE;
 	}
 
@@ -145,7 +144,7 @@ __validate_parameters (MidgardConnection *mgd, guint n_params, const GParameter 
 }	
 
 static GParameter *
-__convert_to_storage_parameters (MidgardConnection *mgd, guint n_params, const GParameter *parameters, MidgardUserClass *klass, GValue idval)
+__convert_to_storage_parameters (MidgardConnection *mgd, guint n_params, const GParameter *parameters, MidgardUserClass *klass, GValue idval, GError **error)
 {
 	GParameter *tbl_params = g_new0 (GParameter, n_params);
 
@@ -166,8 +165,7 @@ __convert_to_storage_parameters (MidgardConnection *mgd, guint n_params, const G
 				/* Validate authentication type */
 				guint id = midgard_core_auth_type_id_from_name (mgd, g_value_get_string ((const GValue *)&parameters[i].value));
 				if (id == 0) {
-
-					MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INTERNAL, "Unknown authentication type");
+					g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Unknown authentication type");
 					g_free (tbl_params);
 					return NULL;
 				}
@@ -220,24 +218,26 @@ midgard_user_get (MidgardConnection *mgd, guint n_params, const GParameter *para
 }
 
 MidgardUser *
-__midgard_user_get (MidgardConnection *mgd, guint n_params, const GParameter *parameters)
+__midgard_user_get (MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error)
 {
 	g_return_val_if_fail (mgd != NULL, NULL);
 	g_return_val_if_fail (parameters != NULL, NULL);
-
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
+	
 	MidgardUserClass *klass = g_type_class_peek (MIDGARD_TYPE_USER);
 	
 	/* Validate properties and find required ones */
-	if (!__validate_parameters(mgd, n_params, parameters, 2)) 
+	GError *err = NULL;
+	if (!__validate_parameters(mgd, n_params, parameters, 2, &err)) {
+		g_propagate_error (error, err);
 		return NULL;
+	}
 
 	/* Create new parameters. We need to pass column names instead of properties */
 	GValue idval = {0, };
 	g_value_init (&idval, G_TYPE_UINT);
-	GParameter *tbl_params = __convert_to_storage_parameters (mgd, n_params, parameters, klass, idval);
+	GParameter *tbl_params = __convert_to_storage_parameters (mgd, n_params, parameters, klass, idval, &err);
 	if (!tbl_params) {
-
+		g_propagate_error (error, err);
 		g_value_unset (&idval);
 		return NULL;
 	}
@@ -247,22 +247,20 @@ __midgard_user_get (MidgardConnection *mgd, guint n_params, const GParameter *pa
 	g_value_unset (&idval);
 
 	if (!model) {
-
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_NOT_EXISTS);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
 		return NULL;
 	}
 
 	guint rows = gda_data_model_get_n_rows(model);
 
 	if (rows > 1) {
-		
-		g_warning ("midgard_user storage inconsistency. Found %d records. Expected one.", rows);
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_INTERNAL);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, 
+				"midgard_user storage inconsistency. Found %d records. Expected one.", rows);
+		return NULL;
 	}
 
 	if(rows == 0) {
-		
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_NOT_EXISTS);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
 		g_object_unref(model);
 		return NULL;
 	}
@@ -280,6 +278,7 @@ __midgard_user_get (MidgardConnection *mgd, guint n_params, const GParameter *pa
  * @mgd: #MidgardConnection instance
  * @n_params: number of parameters
  * @parameters: #GParameter with #MidgardUser properties
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Fetch #MidgardUser objects from storage. 
  * At least 'login' and 'authtype' property are required to be set in parameters.
@@ -298,26 +297,25 @@ __midgard_user_get (MidgardConnection *mgd, guint n_params, const GParameter *pa
  * Since 9.09
  */
 MidgardUser **
-midgard_user_query (MidgardConnection *mgd, guint n_params, const GParameter *parameters)
+midgard_user_query (MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error)
 {
 	MidgardUserClass *klass = g_type_class_peek (MIDGARD_TYPE_USER);
-	return klass->query (mgd, n_params, parameters);
+	return klass->query (mgd, n_params, parameters, error);
 }
 
 MidgardUser **
-__midgard_user_query (MidgardConnection *mgd, guint n_params, const GParameter *parameters)
+__midgard_user_query (MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error)
 {
 	g_return_val_if_fail (mgd != NULL, NULL);
 	g_return_val_if_fail (parameters != NULL, NULL);
 	MidgardUser **result = NULL;
 
 	if (n_params == 0) {
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INTERNAL, "Expected one parameter (at least) to get user object");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Expected one parameter (at least) to get user object");
 		return result;
 	}
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
+	
 	guint i;
 	GSList *constraints = NULL;
 	GSList *objects_list = NULL;
@@ -355,7 +353,7 @@ __midgard_user_query (MidgardConnection *mgd, guint n_params, const GParameter *
 	GError *err = NULL;
 	midgard_executable_execute (MIDGARD_EXECUTABLE (select), &err);
 	if (err) {
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INTERNAL, 
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, 
 				"Failed to query user. %s", err && err->message ? err->message : "Unknown reason");
 		g_clear_error (&err);
 		goto free_objects_and_return;
@@ -378,6 +376,7 @@ free_objects_and_return:
 /** 
  * midgard_user_create:
  * @self: #MidgardUser instance
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Creates database record for given user.
  * 
@@ -402,16 +401,16 @@ free_objects_and_return:
  * Since: 9.09
  */
 gboolean 
-midgard_user_create (MidgardUser *self)
+midgard_user_create (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail (self != NULL, FALSE);
 
 	MidgardUserClass *klass = MIDGARD_USER_GET_CLASS (self);
-	return klass->create (self);
+	return klass->create (self, error);
 }
 
 gboolean 
-__midgard_user_create (MidgardUser *self)
+__midgard_user_create (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail (self != NULL, FALSE);
 	g_return_val_if_fail (MIDGARD_IS_USER (self), FALSE);
@@ -421,12 +420,10 @@ __midgard_user_create (MidgardUser *self)
 
 	g_return_val_if_fail (mgd != NULL, FALSE);
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
+	
 	/* Validate guid */
 	if (guid || (guid && !midgard_is_guid (guid))) {
-
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_INVALID_PROPERTY_VALUE);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid property value");
 		return FALSE;
 	}
 
@@ -441,16 +438,15 @@ __midgard_user_create (MidgardUser *self)
 	if (auth_type == NULL || (auth_type && *auth_type == '\0')) {
 	
 		g_value_unset (&aval);
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_INVALID_PROPERTY_VALUE);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE);
 		return FALSE;
 	}
 
 	guint id = midgard_core_auth_type_id_from_name (mgd, auth_type);
 
 	if (id == 0) {
-		
 		g_value_unset (&aval);
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INTERNAL, "Unknown authentication type");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Unknown authentication type");
 		return FALSE;
 	}
 
@@ -471,8 +467,7 @@ __midgard_user_create (MidgardUser *self)
 	MidgardUser *user = midgard_user_get (mgd, 2, (const GParameter *) parameters);
 
 	/* Reset error, it might be changed by midgard_user_get */
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
+	
 	g_free (parameters);
 	g_value_unset (&aval);
 	g_value_unset (&lval);
@@ -480,7 +475,7 @@ __midgard_user_create (MidgardUser *self)
 	if (user) {
 		
 		g_object_unref (user);
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_DUPLICATE);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_DUPLICATE);
 		return FALSE;
 	}
 
@@ -495,7 +490,7 @@ __midgard_user_create (MidgardUser *self)
 	g_free ( (gchar *)MIDGARD_DBOBJECT (self)->dbpriv->guid);
 	MIDGARD_DBOBJECT (self)->dbpriv->guid = NULL;
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_INTERNAL);
+	g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL);
 
 	return FALSE;
 }
@@ -503,6 +498,7 @@ __midgard_user_create (MidgardUser *self)
 /**
  * midgard_user_update:
  * @self: #MidgardUser instance
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Updates user storage record
  * 
@@ -533,16 +529,16 @@ __midgard_user_create (MidgardUser *self)
  * Since: 9.09
  */
 gboolean 
-midgard_user_update (MidgardUser *self)
+midgard_user_update (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail (self != NULL, FALSE);
 
 	MidgardUserClass *klass = MIDGARD_USER_GET_CLASS (self);
-	return klass->update (self);
+	return klass->update (self, error);
 }
 
 gboolean
-__midgard_user_update (MidgardUser *self)
+__midgard_user_update (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail (self != NULL, FALSE);
 	g_return_val_if_fail (MIDGARD_IS_USER (self), FALSE);
@@ -552,14 +548,12 @@ __midgard_user_update (MidgardUser *self)
 
 	g_return_val_if_fail (mgd != NULL, FALSE);
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
+	
 	/* Validate guid */
 	if (!guid
 		|| (*guid && *guid == '\0')
  		|| (guid && !midgard_is_guid (guid))) {
-
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid value");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid value");
 		return FALSE;
 	}
 
@@ -572,18 +566,16 @@ __midgard_user_update (MidgardUser *self)
 	auth_type = (gchar *) g_value_get_string (&aval);
 
 	if (auth_type == NULL || (auth_type && *auth_type == '\0')) {
-	
 		g_value_unset (&aval);
-		MIDGARD_ERRNO_SET (mgd, MGD_ERR_INVALID_PROPERTY_VALUE);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, NULL);
 		return FALSE;
 	}
 
 	guint id = midgard_core_auth_type_id_from_name (mgd, auth_type);
 
-	if (id == 0) {
-		
+	if (id == 0) {	
 		g_value_unset (&aval);
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INTERNAL, "Unknown authentication type");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Unknown authentication type", NULL);
 		return FALSE;
 	}
 
@@ -605,17 +597,15 @@ __midgard_user_update (MidgardUser *self)
 	MidgardUser *user = midgard_user_get (mgd, np, (const GParameter *) parameters);
 
 	/* Reset error, it might be changed by midgard_user_get */
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
+	
 	g_free (parameters);
 	g_value_unset (&aval);
 	g_value_unset (&lval);
 
 	if (user) {
 	       
-		if (!g_str_equal (MGD_OBJECT_GUID (user), MGD_OBJECT_GUID (self))) {
-		
-			MIDGARD_ERRNO_SET (mgd, MGD_ERR_DUPLICATE);
+		if (!g_str_equal (MGD_OBJECT_GUID (user), MGD_OBJECT_GUID (self))) {	
+			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_DUPLICATE, NULL);
 			g_object_unref (user);
 			return FALSE;
 		}
@@ -624,7 +614,7 @@ __midgard_user_update (MidgardUser *self)
 	if (midgard_core_query_update_dbobject_record (MIDGARD_DBOBJECT (self), NULL) )
 		return TRUE;
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_INTERNAL);
+	g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, NULL);
 	return FALSE;
 }
 
@@ -668,14 +658,13 @@ __midgard_user_delete (MidgardUser *self)
 
 	g_return_val_if_fail (mgd != NULL, FALSE);
 
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
+	
 	/* Validate guid */
 	if (!guid
 		|| (*guid && *guid == '\0')
  		|| (guid && !midgard_is_guid (guid))) {
 
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid value");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid value");
 		return FALSE;
 	}
 
@@ -746,8 +735,6 @@ __midgard_user_login (MidgardUser *self)
 	MidgardConnection *mgd = MGD_OBJECT_CNC(self);
 	g_return_val_if_fail(mgd != NULL, FALSE);
 
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
-
 	/* Check if given user instance is already logged in */
 	if (mgd->priv->user && mgd->priv->user == self)
 		return TRUE;
@@ -757,7 +744,7 @@ __midgard_user_login (MidgardUser *self)
 		|| (guid && *guid == '\0')
 		|| (guid && !midgard_is_guid(guid)))
 	{
-		MIDGARD_ERRNO_SET_STRING(mgd, MGD_ERR_INVALID_PROPERTY_VALUE, "'guid' property doesn't hold guid value");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "'guid' property doesn't hold guid value", NULL);
 		return FALSE;
 	}
 
@@ -776,6 +763,7 @@ __midgard_user_login (MidgardUser *self)
 /**
  * midgard_user_log_out:
  * @self: #MidgardUser instance
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Cases to return %FALSE:
  * <itemizedlist>
@@ -792,16 +780,16 @@ __midgard_user_login (MidgardUser *self)
  * Since: 9.09
  */
 gboolean 
-midgard_user_log_out (MidgardUser *self)
+midgard_user_log_out (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail(self != NULL, FALSE);
 
 	MidgardUserClass *klass = MIDGARD_USER_GET_CLASS(self);
-	return klass->log_out(self);
+	return klass->log_out(self, error);
 }
 
 gboolean 
-__midgard_user_logout (MidgardUser *self)
+__midgard_user_logout (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail(self != NULL, FALSE);
 	g_return_val_if_fail(MIDGARD_IS_USER (self), FALSE);
@@ -809,12 +797,10 @@ __midgard_user_logout (MidgardUser *self)
 	MidgardConnection *mgd = MGD_OBJECT_CNC (self);
 	g_return_val_if_fail(mgd != NULL, FALSE);
 
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_OK);
-
 	GSList *list = mgd->priv->authstack;
 
 	if (list == NULL || (list && g_slist_length(list) < 1)) {
-		MIDGARD_ERRNO_SET(mgd, MGD_ERR_INTERNAL);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, NULL;
 		return FALSE;
 	}
 
@@ -837,10 +823,7 @@ __midgard_user_logout (MidgardUser *self)
 		return TRUE;
 	}
 
-	/* Throw this warning explicitly as it's programmer fault.
-	   Some language bindings might throw an exception in such case. */
-	g_warning("Can not log out user who is not currently logged in");
-	MIDGARD_ERRNO_SET(mgd, MGD_ERR_INTERNAL);
+	g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Can not log out user who is not currently logged in");
 
 	return FALSE;
 }
@@ -905,7 +888,7 @@ __midgard_user_is_admin(MidgardUser *self)
 }
 
 /* Set active flag */
-gboolean midgard_user_set_active(MidgardUser *self, gboolean flag)
+gboolean midgard_user_set_active(MidgardUser *self, gboolean flag, GError **error)
 {
 	g_assert(self != NULL);
 
@@ -916,16 +899,14 @@ gboolean midgard_user_set_active(MidgardUser *self, gboolean flag)
 
 	MidgardConnection *mgd = MIDGARD_DBOBJECT (self)->dbpriv->mgd;
 	MidgardUser *user = MIDGARD_USER(mgd->priv->user);
-
-	MIDGARD_ERRNO_SET (mgd, MGD_ERR_OK);
-
+	
 	if(!user) {
-		MIDGARD_ERRNO_SET(mgd, MGD_ERR_ACCESS_DENIED);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_ACCESS_DENIED, NULL);
 		return FALSE;
 	}
 	
 	if(midgard_user_is_user(user)) {
-		MIDGARD_ERRNO_SET(mgd, MGD_ERR_ACCESS_DENIED);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_ACCESS_DENIED, NULL);
 		return FALSE;
 	}
 
@@ -1174,7 +1155,7 @@ __midgard_user_get_person(MidgardUser *self)
 			GValue gval = {0, };
 			g_value_init (&gval, G_TYPE_STRING);
 			g_value_set_string (&gval, self->priv->person_guid);
-			self->priv->person = midgard_object_new (MGD_OBJECT_CNC (self), "midgard_person", &gval);
+			self->priv->person = midgard_object_new (MGD_OBJECT_CNC (self), "midgard_person", &gval, NULL);
 			g_value_unset (&gval);
 		}
 	}

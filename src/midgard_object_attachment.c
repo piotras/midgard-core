@@ -62,6 +62,7 @@ MidgardObject **midgard_object_list_attachments(MidgardObject *self, guint *n_ob
  * @name: name for attachment
  * @title: its title
  * @mimetype: and mimetype
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Creates object's attachment using given properties.
  * Any property may be explicitly set to NULL.
@@ -69,14 +70,10 @@ MidgardObject **midgard_object_list_attachments(MidgardObject *self, guint *n_ob
  * Returns: (transfer full): newly created #MidgardObject of midgard_attachment class or %NULL on failure
  */
 MidgardObject *midgard_object_create_attachment(MidgardObject *self, 
-		const gchar *name, const gchar *title, const gchar *mimetype)
+		const gchar *name, const gchar *title, const gchar *mimetype, GError **error)
 {
 	g_return_val_if_fail(self != NULL, NULL);
 
-	if(!MGD_OBJECT_GUID (self)) {
-		g_warning("Object is not fetched from database. Empty guid");
-		return NULL;
-	}
 
 	guint n_params, i = 0;
 
@@ -157,7 +154,7 @@ MidgardObject *midgard_object_create_attachment(MidgardObject *self,
 	MidgardObject *att = 
 		midgard_core_object_parameters_create(MGD_OBJECT_CNC (self), 
 				"midgard_attachment", MGD_OBJECT_GUID (self), 
-				n_params, parameters);
+				n_params, parameters, error);
 	
 	for(i = 0; i < n_params; i++) {	
 		g_value_unset(&parameters[i].value);
@@ -173,6 +170,7 @@ MidgardObject *midgard_object_create_attachment(MidgardObject *self,
  * @self: #MidgardObject instance
  * @n_params: number of properties
  * @parameters: (allow-none): properties list
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Delete object's attachments(s) which match given properties' values.
  * Properties list in @parameters is optional. All object's attachments are 
@@ -181,18 +179,13 @@ MidgardObject *midgard_object_create_attachment(MidgardObject *self,
  * Returns: %TRUE on success, %FALSE if at least one of the attachment could not be deleted
  */
 gboolean midgard_object_delete_attachments(MidgardObject *self, 
-		guint n_params, const GParameter *parameters)
+		guint n_params, const GParameter *parameters, GError **error)
 {
 	g_assert(self != NULL);
 
-	if(!MGD_OBJECT_GUID (self)) {
-		
-		g_warning("Object is not fetched from database. Empty guid");
-	}
-
 	return midgard_core_object_parameters_delete(
 			MGD_OBJECT_CNC (self), "midgard_attachment", 
-			MGD_OBJECT_GUID (self), n_params, parameters);
+			MGD_OBJECT_GUID (self), n_params, parameters, error);
 }
 
 
@@ -202,6 +195,7 @@ gboolean midgard_object_delete_attachments(MidgardObject *self,
  * @delete_blob: whether blob should be deleted as well
  * @n_params: number of properties
  * @parameters: (allow-none): properties list
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Purge object's attachments(s) which match given properties' values.
  * Properties list in @parameters is optional. All object's attachments are 
@@ -218,7 +212,7 @@ gboolean midgard_object_delete_attachments(MidgardObject *self,
  * Returns: %TRUE on success, %FALSE if at least one of the attachment could not be purged
  */
 gboolean midgard_object_purge_attachments(MidgardObject *self, gboolean delete_blob,
-		guint n_params, const GParameter *parameters)
+		guint n_params, const GParameter *parameters, GError **error)
 {
 	g_assert(self != NULL);
 
@@ -233,13 +227,13 @@ gboolean midgard_object_purge_attachments(MidgardObject *self, gboolean delete_b
 	
 		rv = midgard_core_object_parameters_purge_with_blob(
 				MGD_OBJECT_CNC (self), "midgard_attachment", 
-				MGD_OBJECT_GUID (self), n_params, parameters);
+				MGD_OBJECT_GUID (self), n_params, parameters, error);
 	
 	} else {
 		
 		rv = midgard_core_object_parameters_purge(
 				MGD_OBJECT_CNC (self), "midgard_attachment",
-				MGD_OBJECT_GUID (self), n_params, parameters);
+				MGD_OBJECT_GUID (self), n_params, parameters, error);
 	}
 
 	return rv;

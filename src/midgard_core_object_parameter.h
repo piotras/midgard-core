@@ -26,19 +26,19 @@ MidgardObject **midgard_core_object_parameters_list(
 
 MidgardObject *midgard_core_object_parameters_create(
 		MidgardConnection *mgd, const gchar *class_name, 
-		const gchar *guid, guint n_params, const GParameter *parameters);
+		const gchar *guid, guint n_params, const GParameter *parameters, GError **error);
 
 gboolean midgard_core_object_parameters_delete(
 		MidgardConnection *mgd, const gchar *class_name,
-		const gchar *guid, guint n_params, const GParameter *parameters);
+		const gchar *guid, guint n_params, const GParameter *parameters, GError **error);
 
 gboolean midgard_core_object_parameters_purge(
 		MidgardConnection *mgd, const gchar *class_name,
-		const gchar *guid, guint n_params, const GParameter *parameters);
+		const gchar *guid, guint n_params, const GParameter *parameters, GError **error);
 
 gboolean midgard_core_object_parameters_purge_with_blob(
 		MidgardConnection *mgd, const gchar *class_name,
-		const gchar *guid, guint n_params, const GParameter *parameters);
+		const gchar *guid, guint n_params, const GParameter *parameters, GError **error);
 
 MidgardObject **midgard_core_object_parameters_find(
 		MidgardConnection *mgd, const gchar *class_name,

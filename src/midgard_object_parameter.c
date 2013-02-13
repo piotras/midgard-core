@@ -161,13 +161,14 @@ const GValue *midgard_object_get_parameter(MidgardObject *self,
  * @domain: parameter's domain string
  * @name: parameter's name string
  * @value: a GValue value which should be set for domain&name pair
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Creates object's parameter object if it doesn't exists, updates otherwise.
  *
  * Returns: %TRUE on success, %FALSE otherwise
  */ 
 gboolean 
-midgard_object_set_parameter (MidgardObject *self, const gchar *domain, const gchar *name, GValue *value) 
+midgard_object_set_parameter (MidgardObject *self, const gchar *domain, const gchar *name, GValue *value, GError **error) 
 {
 	g_return_val_if_fail (self != NULL, FALSE);
 
@@ -198,15 +199,15 @@ midgard_object_set_parameter (MidgardObject *self, const gchar *domain, const gc
 
 	/* This is the case when set_parameter is invoked
 	 * before any get_parameter */
-	if(get_value == NULL && delete_parameter) {
-		MIDGARD_ERRNO_SET(MGD_OBJECT_CNC (self), MGD_ERR_NOT_EXISTS);
+	if (get_value == NULL && delete_parameter) {
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
 		return FALSE;
 	}
 
 	/* Parameter doesn't exist. We have to create it */
 	if(get_value == NULL && !delete_parameter){
 		
-		param = midgard_object_new(MGD_OBJECT_CNC (self), "midgard_parameter", NULL);
+		param = midgard_object_new(MGD_OBJECT_CNC (self), "midgard_parameter", NULL, NULL);
 		g_object_set(param, 
 				"domain", domain, 
 				"name", name,
@@ -215,24 +216,23 @@ midgard_object_set_parameter (MidgardObject *self, const gchar *domain, const gc
 			
 		g_object_set_property(G_OBJECT(param), "value", value);
 
-		if(midgard_object_create(param)) {
-		
+		GError *err = NULL;
+		if (midgard_object_create(param, &err)) {
 			if(domain_collector) {
 				if(!midgard_collector_set(domain_collector,
 							name, "value", value)){
 					g_warning("Failed to update parameter's cache"); 
 				}
 			}
-			
 			g_object_unref(param);
 			return TRUE;
+		}
 
-		} else {
-			/* Error should be already set by create */
+		if (err) {
+			g_propagate_error (error, err);
 			g_object_unref(param);
 			return FALSE;
 		}
-
 	
 		/* Parameter exists. if value is '' we delete it.
 		 * In any other case we update it */
@@ -269,10 +269,9 @@ midgard_object_set_parameter (MidgardObject *self, const gchar *domain, const gc
 			return FALSE;
 		}
 
+		GError *err = NULL;
 		if(delete_parameter){
-
-			if(midgard_object_delete(
-						MIDGARD_OBJECT(ret_object[0]), FALSE)) {
+			if (midgard_object_delete(MIDGARD_OBJECT(ret_object[0]), FALSE, &err)) {
 				midgard_collector_remove_key(
 						domain_collector,
 						name);
@@ -280,10 +279,8 @@ midgard_object_set_parameter (MidgardObject *self, const gchar *domain, const gc
 			}
 			
 		} else {
-			
 			g_object_set(ret_object[0], "value", value_string, NULL);
-			if(midgard_object_update(
-						MIDGARD_OBJECT(ret_object[0]))) {
+			if (midgard_object_update(MIDGARD_OBJECT(ret_object[0]), &err)) {
 				
 				if(domain_collector) {
 					midgard_collector_set(domain_collector,
@@ -294,6 +291,9 @@ midgard_object_set_parameter (MidgardObject *self, const gchar *domain, const gc
 			}
 		}
 		
+		if (err) 
+			g_propagate_error(error, err);
+
 		g_object_unref(ret_object[0]);
 		g_free(ret_object);
 		if(do_return_true)
@@ -356,6 +356,7 @@ MidgardObject **midgard_object_list_parameters(MidgardObject *self, const gchar 
  * @self: #MidgardObject instance
  * @n_params: number of properties
  * @parameters: properties list
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Delete object's parameter(s) which match given properties' values.
  * Properties list in @parameters is optional. All object's parameters are 
@@ -364,18 +365,13 @@ MidgardObject **midgard_object_list_parameters(MidgardObject *self, const gchar 
  * Returns: %TRUE on success, %FALSE if at least one of the parameters could not be deleted
  */
 gboolean midgard_object_delete_parameters(MidgardObject *self, 
-		guint n_params, const GParameter *parameters)
+		guint n_params, const GParameter *parameters, GError **error)
 {
 	g_assert(self != NULL);
 
-	if(!MGD_OBJECT_GUID (self)) {
-		
-		g_warning("Object is not fetched from database. Empty guid");
-	}
-
 	return midgard_core_object_parameters_delete(
 			MGD_OBJECT_CNC (self), "midgard_parameter", 
-			MGD_OBJECT_GUID (self), n_params, parameters);
+			MGD_OBJECT_GUID (self), n_params, parameters, error);
 }
 
 /**
@@ -383,6 +379,7 @@ gboolean midgard_object_delete_parameters(MidgardObject *self,
  * @self: #MidgardObject instance
  * @n_params: number of properties
  * @parameters: properties list
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Purge object's parameter(s) which match given properties' values.
  * Properties list in @parameters is optional. All object's parameters are 
@@ -391,18 +388,13 @@ gboolean midgard_object_delete_parameters(MidgardObject *self,
  * Returns: %TRUE on success, %FALSE if at least one of the parameters could not be purged
  */
 gboolean midgard_object_purge_parameters(MidgardObject *self, 
-		guint n_params, const GParameter *parameters)
+		guint n_params, const GParameter *parameters, GError **error)
 {
 	g_assert(self != NULL);
 
-	if(!MGD_OBJECT_GUID (self)) {
-		
-		g_warning("Object is not fetched from database. Empty guid");
-	}
-
 	return midgard_core_object_parameters_purge(
 			MGD_OBJECT_CNC (self), "midgard_parameter", 
-			MGD_OBJECT_GUID (self), n_params, parameters);
+			MGD_OBJECT_GUID (self), n_params, parameters, error);
 }
 
 /**
@@ -475,7 +467,7 @@ MidgardObject **midgard_core_object_parameters_list(
 
 MidgardObject *midgard_core_object_parameters_create(
 		MidgardConnection *mgd, const gchar *class_name,
-		const gchar *guid, guint n_params, const GParameter *parameters)
+		const gchar *guid, guint n_params, const GParameter *parameters, GError **error)
 {
 	g_assert(mgd != NULL);
 	g_assert(class_name != NULL);
@@ -490,7 +482,7 @@ MidgardObject *midgard_core_object_parameters_create(
 	MidgardObjectClass *klass = 
 		MIDGARD_OBJECT_GET_CLASS_BY_NAME(class_name);
 
-	MidgardObject *object = midgard_object_new(mgd, class_name, NULL);
+	MidgardObject *object = midgard_object_new(mgd, class_name, NULL, NULL);
 
 	/* Check if properties in parameters are registered for given class */
 	for ( i = 0; i < n_params; i++) {
@@ -501,9 +493,8 @@ MidgardObject *midgard_core_object_parameters_create(
 		pspec = g_object_class_find_property(G_OBJECT_CLASS(klass), prop_name);
 
 		if(!pspec) {
-			
-			MIDGARD_ERRNO_SET(mgd, MGD_ERR_INVALID_PROPERTY);
-			g_warning("Property '%s' not registered for '%s' class", 
+			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY,
+					"Property '%s' not registered for '%s' class", 
 					parameters[i].name, class_name);
 			g_object_unref(object);
 			return NULL;
@@ -515,10 +506,10 @@ MidgardObject *midgard_core_object_parameters_create(
 	/* Set parentguid so we definitely define parameter or attachment*/
 	g_object_set(object, "parentguid", guid, NULL);
 
-	if(!midgard_object_create(object)) {
-		
+	GError *err = NULL;
+	if (!midgard_object_create(object, &err)) {
+		g_propagate_error (error, err);
 		g_object_unref(object);
-		/* error code is set by create method */
 		return NULL;
 	}
 
@@ -576,7 +567,7 @@ static GObject **__fetch_parameter_objects(
 
 gboolean midgard_core_object_parameters_delete(
 		MidgardConnection *mgd, const gchar *class_name,
-		const gchar *guid, guint n_params, const GParameter *parameters)
+		const gchar *guid, guint n_params, const GParameter *parameters, GError **error)
 {
 	g_assert(mgd != NULL);
 	g_assert(class_name != NULL);
@@ -594,8 +585,12 @@ gboolean midgard_core_object_parameters_delete(
 	
 	while (objects[i] != NULL ) {
 	
-		if(midgard_object_delete(MIDGARD_OBJECT(objects[i]), FALSE))
+		GError *err = NULL;
+		if(midgard_object_delete(MIDGARD_OBJECT(objects[i]), FALSE, &err))
 			rv = TRUE;
+
+		if (err)
+			g_propagate_error (error, err);
 
 		g_object_unref(objects[i]);
 		i++;
@@ -607,7 +602,7 @@ gboolean midgard_core_object_parameters_delete(
 
 gboolean midgard_core_object_parameters_purge(
 		MidgardConnection *mgd, const gchar *class_name,
-		const gchar *guid, guint n_params, const GParameter *parameters)
+		const gchar *guid, guint n_params, const GParameter *parameters, GError **error)
 {
 	g_assert(mgd != NULL);
 	g_assert(class_name != NULL);
@@ -625,8 +620,12 @@ gboolean midgard_core_object_parameters_purge(
 	
 	while (objects[i] != NULL ) {
 	
-		if(midgard_object_purge(MIDGARD_OBJECT(objects[i]), FALSE))
+		GError *err = NULL;
+		if (midgard_object_purge(MIDGARD_OBJECT(objects[i]), FALSE, &err))
 			rv = TRUE;
+
+		if (err)
+			g_propagate_error (error, err);
 
 		g_object_unref(objects[i]);
 		i++;
@@ -638,7 +637,7 @@ gboolean midgard_core_object_parameters_purge(
 
 gboolean midgard_core_object_parameters_purge_with_blob(
 		MidgardConnection *mgd, const gchar *class_name,
-		const gchar *guid, guint n_params, const GParameter *parameters)
+		const gchar *guid, guint n_params, const GParameter *parameters, GError **error)
 {
 	g_assert(mgd != NULL);
 	g_assert(class_name != NULL);
@@ -673,7 +672,11 @@ gboolean midgard_core_object_parameters_purge_with_blob(
 		if(midgard_blob_exists(blob))
 			midgard_blob_remove_file(blob, NULL);
 		
-		midgard_object_purge(MIDGARD_OBJECT(objects[i]), FALSE);
+		GError *err = NULL;
+		midgard_object_purge(MIDGARD_OBJECT(objects[i]), FALSE, &err);
+		
+		if (err) 
+			g_propagate_error (error, err);
 
 		g_object_unref(blob);
 		g_object_unref(objects[i]);

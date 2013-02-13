@@ -280,16 +280,16 @@ void midgard_core_object_get_xml_doc(  MidgardConnection *mgd,
 					xmlDoc **doc,
 					xmlNode **root_node);
 gchar *midgard_core_object_to_xml(GObject *object);
-gboolean _nodes2object(GObject *object, xmlNode *node, gboolean force);
+gboolean _nodes2object(GObject *object, xmlNode *node, gboolean force, GError **error);
 xmlNode *_get_type_node(xmlNode *node);
 GObject **midgard_core_object_from_xml(MidgardConnection *mgd, const gchar *xml, gboolean force);
 
 /* Object's routines */
-gboolean _midgard_object_update(MidgardObject *object, _ObjectActionUpdate replicate, GError **error);
-gboolean _midgard_object_create(MidgardObject *object, const gchar *create_guid, _ObjectActionUpdate replicate);
-gboolean _midgard_object_delete(MidgardObject *object, gboolean check_dependentents);
-gboolean _midgard_object_purge(MidgardObject *object, gboolean check_dependentents);
-void _object_copy_properties(GObject *src, GObject *dest);
+gboolean _midgard_object_update	(MidgardObject *object, _ObjectActionUpdate replicate, GError **error);
+gboolean _midgard_object_create	(MidgardObject *object, const gchar *create_guid, _ObjectActionUpdate replicate, GError **error);
+gboolean _midgard_object_delete	(MidgardObject *object, gboolean check_dependentents, GError **error);
+gboolean _midgard_object_purge	(MidgardObject *object, gboolean check_dependentents, GError **error);
+void _object_copy_properties	(GObject *src, GObject *dest);
 
 /* Links */
 gboolean midgard_core_object_prop_link_is_valid(GType ltype);

@@ -110,7 +110,7 @@ midgard_storage_create_base_storage(MidgardConnection *mgd)
 
 	if(!model || ret_rows == 0) {
 		
-		MidgardObject *person = midgard_object_new (mgd, "midgard_person", NULL);
+		MidgardObject *person = midgard_object_new (mgd, "midgard_person", NULL, NULL);
 		/* guid */
 		g_free ((gchar *)MGD_OBJECT_GUID (person));
 		MGD_OBJECT_GUID (person) = g_strdup (ADMIN_PERSON_GUID);
@@ -132,7 +132,7 @@ midgard_storage_create_base_storage(MidgardConnection *mgd)
 		midgard_core_metadata_set_created (MGD_DBOBJECT_METADATA (person), &val);
 		g_value_unset (&val);
 
-		midgard_replicator_import_object (MIDGARD_DBOBJECT (person), TRUE);
+		midgard_replicator_import_object (MIDGARD_DBOBJECT (person), TRUE, NULL);
 	}
 
 	if(model)

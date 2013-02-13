@@ -90,28 +90,13 @@ typedef enum
 	MIDGARD_GENERIC_ERROR_OBJECT_IS_LOCKED = -27 /**< Object is locked */
 } MidgardGenericError;
 
+#define MIDGARD_ERROR midgard_error_quark ()
+
+GQuark		midgard_error_quark           	(void);
 GQuark 		midgard_error_generic		(void);
 const gchar 	*midgard_error_string		(GQuark domain, gint errcode);
-void 		midgard_set_error		(MidgardConnection *mgd, GQuark domain, gint errcode, const gchar *msg, ...);
 void 		midgard_error_default_log	(const gchar *domain, GLogLevelFlags level, const gchar *msg, gpointer ptr);
 gint 		midgard_error_parse_loglevel	(const gchar *levelstring);
-
-#define MIDGARD_ERRNO_SET(str, errcode)  \
-	str->errnum = errcode;  \
-	midgard_set_error(str, \
-	MGD_GENERIC_ERROR, \
-	errcode, \
-	NULL); \
-	g_signal_emit_by_name(str, "error"); 	
-
-#define MIDGARD_ERRNO_SET_STRING(__mgd, __errcode, __format...) G_STMT_START { \
-	__mgd->errnum = __errcode; \
-	midgard_set_error(__mgd, \
-			MGD_GENERIC_ERROR, \
-                        __errcode, __format); \
-        g_clear_error(&__mgd->err); \
-	g_signal_emit_by_name (__mgd, "error"); \
-	} G_STMT_END
 
 void mgd_info(const gchar *format, ...);
 

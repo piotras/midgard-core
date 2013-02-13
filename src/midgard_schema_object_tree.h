@@ -46,7 +46,7 @@ GType		midgard_schema_object_tree_get_type			(void);
 
 gboolean	midgard_schema_object_tree_is_in_tree			(MidgardObject *object, MidgardObject *parent_object);
 const gchar 	*midgard_schema_object_tree_get_parent_name		(MidgardObject *object);
-MidgardObject	*midgard_schema_object_tree_get_parent_object		(MidgardObject *object);
+MidgardObject	*midgard_schema_object_tree_get_parent_object		(MidgardObject *object, GError **error);
 MidgardObject   **midgard_schema_object_tree_list_objects		(MidgardObject *object, guint *n_objects);
 MidgardObject	**midgard_schema_object_tree_list_children_objects	(MidgardObject *object, const gchar *classname, guint *n_objects);
 

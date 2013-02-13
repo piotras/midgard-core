@@ -134,33 +134,32 @@ enum MidgardObjectAction
 	MGD_OBJECT_ACTION_UPDATE /**< Object has been updated >*/
 };
 
-MidgardObject *midgard_object_new (MidgardConnection *mgd, const gchar *name, GValue *value);
-MidgardObject *midgard_object_factory (MidgardConnection *mgd, const gchar *name, GValue *value);
+MidgardObject *midgard_object_new 	(MidgardConnection *mgd, const gchar *name, GValue *value, GError **error);
+MidgardObject *midgard_object_factory 	(MidgardConnection *mgd, const gchar *name, GValue *value, GError **error);
 
-gboolean midgard_object_get_by_id(MidgardObject *object, guint id);
-gboolean midgard_object_get_by_guid(MidgardObject *object, const gchar *guid);
-gboolean midgard_object_get_by_path(MidgardObject *self, const gchar *path);
+gboolean 	midgard_object_get_by_id	(MidgardObject *object, guint id, GError **error);
+gboolean 	midgard_object_get_by_guid	(MidgardObject *object, const gchar *guid, GError **error);
+gboolean 	midgard_object_get_by_path	(MidgardObject *self, const gchar *path, GError **error);
 
-gboolean midgard_object_save(MidgardObject *self);
-gboolean midgard_object_update(MidgardObject *self);
-gboolean midgard_object_create(MidgardObject *object);
-gboolean midgard_object_delete(MidgardObject *object, gboolean check_dependents);
-gboolean midgard_object_purge(MidgardObject *object, gboolean check_dependents);
+gboolean 	midgard_object_save	(MidgardObject *self, GError **error);
+gboolean 	midgard_object_update	(MidgardObject *self, GError **error);
+gboolean 	midgard_object_create	(MidgardObject *object, GError **error);
+gboolean 	midgard_object_delete	(MidgardObject *object, gboolean check_dependents, GError **error);
+gboolean 	midgard_object_purge	(MidgardObject *object, gboolean check_dependents, GError **error);
 
 gchar * midgard_object_build_path(MidgardObject *mobj);
 
-gboolean midgard_object_has_dependents(MidgardObject *self);
-gboolean midgard_object_set_guid(MidgardObject *self, const gchar *guid);
-void midgard_object_set_connection(MidgardObject *self, MidgardConnection *mgd);
-const MidgardConnection *midgard_object_get_connection(MidgardObject *self);
+gboolean 			midgard_object_has_dependents	(MidgardObject *self);
+gboolean 			midgard_object_set_guid		(MidgardObject *self, const gchar *guid, GError **error);
+void 				midgard_object_set_connection	(MidgardObject *self, MidgardConnection *mgd);
+const MidgardConnection 	*midgard_object_get_connection	(MidgardObject *self);
 
-gboolean midgard_object_approve(MidgardObject *self);
-gboolean midgard_object_is_approved(MidgardObject *self);
-gboolean midgard_object_unapprove(MidgardObject *self);
-
-gboolean midgard_object_lock(MidgardObject *self);
-gboolean midgard_object_is_locked(MidgardObject *self);
-gboolean midgard_object_unlock(MidgardObject *self);
+gboolean	midgard_object_approve		(MidgardObject *self, GError **error);
+gboolean 	midgard_object_is_approved	(MidgardObject *self, GError **error);
+gboolean 	midgard_object_unapprove	(MidgardObject *self, GError **error);
+gboolean 	midgard_object_lock		(MidgardObject *self, GError **error);
+gboolean 	midgard_object_is_locked	(MidgardObject *self, GError **error);
+gboolean 	midgard_object_unlock		(MidgardObject *self, GError **error);
 
 MidgardWorkspace	*midgard_object_get_workspace (MidgardObject *self);
 

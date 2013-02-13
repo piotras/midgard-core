@@ -391,7 +391,7 @@ xmlNode *_get_type_node(xmlNode *node)
 	return NULL;
 }
 
-gboolean _nodes2object(GObject *object, xmlNode *node, gboolean force)
+gboolean _nodes2object(GObject *object, xmlNode *node, gboolean force, GError **error)
 {
 	g_assert(object);
 	g_assert(node);
@@ -405,6 +405,7 @@ gboolean _nodes2object(GObject *object, xmlNode *node, gboolean force)
 	MidgardObject *lobject = NULL;
 	MidgardReflectionProperty *mrp = NULL;
 	const gchar *linktype = NULL;
+	GError *err = NULL;
 
 	if(MIDGARD_IS_OBJECT(object)) {
 		mobject = MIDGARD_OBJECT(object);
@@ -464,19 +465,17 @@ gboolean _nodes2object(GObject *object, xmlNode *node, gboolean force)
 					/* we can use nodeprop directly */
 					lobject = midgard_schema_object_factory_get_object_by_guid (
 							MIDGARD_DBOBJECT (mobject)->dbpriv->mgd,
-							(const gchar *) nodeprop);
+							(const gchar *) nodeprop, &err);
 
 					if(!lobject && !force){
 						g_object_unref(mrp);
 						g_value_unset(&pval);
-						midgard_set_error(MGD_OBJECT_CNC (mobject), 
-								MGD_GENERIC_ERROR, 
-								MGD_ERR_MISSED_DEPENDENCE, 
+						g_set_error (error, MIDGARD_GENERIC_ERROR,
+								MGD_ERR_MISSED_DEPENDENCE,
 								" Can not import %s. "
 								"No '%s' object identified by '%s'",
 								G_OBJECT_TYPE_NAME(object),
-								linktype, nodeprop); 
-						g_clear_error(&MIDGARD_DBOBJECT (mobject)->dbpriv->mgd->err);	
+								linktype, nodeprop);
 						return FALSE;
 					}
 					
@@ -573,7 +572,7 @@ gboolean _nodes2object(GObject *object, xmlNode *node, gboolean force)
 								(const gchar *) cur->name,
 								&prop_object, NULL);
 						if (prop_object) {
-							_nodes2object(prop_object, cur->children, force);	
+							_nodes2object(prop_object, cur->children, force, NULL);	
 							g_value_set_object(&pval, prop_object);
 						} else {
 							g_warning ("Failed to unserialize '%s' object property. Expected to be initialized by given '%s' instance", (const gchar *) cur->name, G_OBJECT_TYPE_NAME (object));
@@ -693,7 +692,7 @@ GObject **midgard_core_object_from_xml(MidgardConnection *mgd,
 		//if(MIDGARD_IS_DBOBJECT(object))
 		//	midgard_object_set_connection(MIDGARD_OBJECT(object), mgd);
 
-		if(child->children && !_nodes2object(G_OBJECT(object), child->children, force)) {
+		if(child->children && !_nodes2object(G_OBJECT(object), child->children, force, NULL)) {
 			g_object_unref(object);
 			object = NULL;		
 		} else {

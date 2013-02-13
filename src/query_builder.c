@@ -90,7 +90,6 @@ MidgardQueryBuilder *midgard_query_builder_new(
 	if(!__type_is_valid(class_type)) {
 
 		g_warning("Can not initialize Midgard Query Builder for '%s'. It's not registered GType system class", classname);
-		MIDGARD_ERRNO_SET(mgd, MGD_ERR_INVALID_OBJECT);
 		return NULL;
 	}
 
@@ -560,7 +559,6 @@ static GSList *midgard_query_builder_execute_or_count(MidgardQueryBuilder *build
 	if (builder->priv->type == MIDGARD_TYPE_USER) {
 		if (user && midgard_user_is_user(user)) {
 			if (MGD_OBJECT_GUID (user) == NULL) {
-				MIDGARD_ERRNO_SET(builder->priv->mgd, MGD_ERR_ACCESS_DENIED);
 				g_warning("Type incompatible with Midgard Query Builder");
 				return NULL;
 			}
@@ -617,7 +615,6 @@ GObject **midgard_query_builder_execute(
 
 	guint i = 0;
 	GSList *list = NULL;
-	MIDGARD_ERRNO_SET(builder->priv->mgd, MGD_ERR_OK);
 
 	MidgardTypeHolder *holder = g_new(MidgardTypeHolder, 1);
 
@@ -657,7 +654,6 @@ guint
 midgard_query_builder_count (MidgardQueryBuilder *builder)
 {
 	g_assert(builder != NULL);
-	MIDGARD_ERRNO_SET(builder->priv->mgd, MGD_ERR_OK);
 	
 	GSList *list =
 		midgard_query_builder_execute_or_count(builder, NULL, MQB_SELECT_GUID);
@@ -905,8 +901,6 @@ midgard_core_qb_set_object_from_query (MidgardQueryBuilder *builder, guint selec
 	MidgardDBObjectClass *dbklass = MIDGARD_DBOBJECT_CLASS(g_type_class_peek(builder->priv->type));
 
 	if (!dbklass) {
-
-		MIDGARD_ERRNO_SET_STRING (mgd, MGD_ERR_INTERNAL, "Failed to peek MidgardDBObjectClass pointer");
 		return NULL;
 	}
 
