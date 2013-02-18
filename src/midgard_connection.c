@@ -148,7 +148,7 @@ static void _midgard_connection_dispose(GObject *object)
 
 	while (self->priv->user != NULL) {
 		// emptying authstack
-		gboolean res = midgard_user_log_out((MidgardUser *)self->priv->user);
+		gboolean res = midgard_user_log_out((MidgardUser *)self->priv->user, NULL);
 		g_assert(res == TRUE);
 	}
 

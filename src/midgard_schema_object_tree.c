@@ -490,6 +490,7 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object, GError **er
  * midgard_schema_object_tree_list_objects:
  * @object: #MidgardObject instance
  * @n_objects: (out):pointer to store number of returned objects
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * List tree children objects, of given @object type.
  *
@@ -497,15 +498,13 @@ midgard_schema_object_tree_get_parent_object (MidgardObject *object, GError **er
  * Since: 10.05
  */ 
 MidgardObject**
-midgard_schema_object_tree_list_objects (MidgardObject *object, guint *n_objects)
+midgard_schema_object_tree_list_objects (MidgardObject *object, guint *n_objects, GError **error)
 {
 	g_return_val_if_fail (object != NULL, NULL);
 
 	*n_objects = 0;
 	GParamSpec *fprop;
 	const gchar *classname = G_OBJECT_TYPE_NAME (object);
-
-	MIDGARD_ERRNO_SET(MGD_OBJECT_CNC (object), MGD_ERR_OK);
 
 	const gchar *primary_prop = midgard_reflector_object_get_property_primary(classname);
 	const gchar *up_property = midgard_reflector_object_get_property_up(classname);
@@ -524,7 +523,7 @@ midgard_schema_object_tree_list_objects (MidgardObject *object, guint *n_objects
 	/* If primary property holds uint and its value is 0, do not try to return objects */
 	if (G_VALUE_HOLDS_UINT(&pval)) {
 		if (g_value_get_uint(&pval) == 0) {
-			MIDGARD_ERRNO_SET(MGD_OBJECT_CNC (object), MGD_ERR_NOT_EXISTS);
+			g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
 			return NULL;
 		}
 	}
@@ -532,7 +531,7 @@ midgard_schema_object_tree_list_objects (MidgardObject *object, guint *n_objects
 	if (g_object_class_find_property(
 				G_OBJECT_GET_CLASS(G_OBJECT(object)),
 				up_property) == NULL ) {
-		MIDGARD_ERRNO_SET(MGD_OBJECT_CNC (object), MGD_ERR_NOT_EXISTS);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, error);
 		return NULL;
 	}
 	
@@ -548,11 +547,8 @@ midgard_schema_object_tree_list_objects (MidgardObject *object, guint *n_objects
 		return (MidgardObject **) objects;
 	}
 
-	if (err) {
-		MIDGARD_ERRNO_SET_STRING (MGD_OBJECT_CNC (object), MGD_ERR_INTERNAL,
-				"%s", err && err->message ? err->message : "Unknown reason");
-		g_clear_error (&err);
-	}
+	if (err) 
+		g_propagate_error (error, err);
 
 	return NULL;
 }
@@ -562,6 +558,7 @@ midgard_schema_object_tree_list_objects (MidgardObject *object, guint *n_objects
  * @object: #MidgardObject instance
  * @classname: name of the tree child class
  * @n_objects: (out): pointer to store number of returned objects
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * List all @classname objects, if exist and are tree children of given @object.
  *
@@ -569,7 +566,7 @@ midgard_schema_object_tree_list_objects (MidgardObject *object, guint *n_objects
  * Since: 10.05
  */ 
 MidgardObject**
-midgard_schema_object_tree_list_children_objects (MidgardObject *object, const gchar *classname, guint *n_objects)
+midgard_schema_object_tree_list_children_objects (MidgardObject *object, const gchar *classname, guint *n_objects, GError **error)
 {
 	g_return_val_if_fail (object != NULL, NULL);
 	g_return_val_if_fail (classname != NULL, NULL);
@@ -578,9 +575,8 @@ midgard_schema_object_tree_list_children_objects (MidgardObject *object, const g
 	GParamSpec *fprop ;
 	const gchar *primary_prop = MIDGARD_DBOBJECT (object)->dbpriv->storage_data->primary;
 
-	MIDGARD_ERRNO_SET(MGD_OBJECT_CNC (object), MGD_ERR_OK);
 	if ((classname == NULL) || (MIDGARD_DBOBJECT (object)->dbpriv->storage_data->children == NULL)) {
-		MIDGARD_ERRNO_SET(MGD_OBJECT_CNC (object), MGD_ERR_NOT_EXISTS);    
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);    
 		return NULL;
 	}
 
@@ -594,16 +590,14 @@ midgard_schema_object_tree_list_children_objects (MidgardObject *object, const g
 	}
 
 	if (!found) {
-		MIDGARD_ERRNO_SET(MGD_OBJECT_CNC (object), MGD_ERR_NOT_EXISTS);
-		g_log(G_LOG_DOMAIN, G_LOG_LEVEL_DEBUG,
-				"Child type (%s) is not a child type of (%s)", 
-				classname, G_OBJECT_TYPE_NAME(object));
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
+		g_debug ("Child type (%s) is not a child type of (%s)", classname, G_OBJECT_TYPE_NAME(object));
 		return NULL;
 	}
 
 	const gchar *property_parent = midgard_reflector_object_get_property_parent(classname);
 	if (property_parent == NULL) {
-		MIDGARD_ERRNO_SET(MGD_OBJECT_CNC (object), MGD_ERR_NOT_EXISTS);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_NOT_EXISTS, NULL);
 		return NULL;
 	}
 
@@ -626,11 +620,8 @@ midgard_schema_object_tree_list_children_objects (MidgardObject *object, const g
 		return (MidgardObject **) objects;
 	}
 
-	if (err) {
-		MIDGARD_ERRNO_SET_STRING (MGD_OBJECT_CNC (object), MGD_ERR_INTERNAL,
-				"%s", err && err->message ? err->message : "Unknown reason");
-		g_clear_error (&err);
-	}
+	if (err) 
+		g_propagate_error (error, err);
 
 	return NULL;
 }

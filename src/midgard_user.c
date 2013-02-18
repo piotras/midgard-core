@@ -47,17 +47,17 @@
 #endif
 
 /* declarations for virtual methods */
-MidgardUser     	*__midgard_user_get               (MidgardConnection *mgd, guint n_params, const GParameter *parameters);
-MidgardUser     	**__midgard_user_query            (MidgardConnection *mgd, guint n_params, const GParameter *parameters);
-gboolean        	__midgard_user_create             (MidgardUser *self);
-gboolean        	__midgard_user_update             (MidgardUser *self);
-gboolean		__midgard_user_delete		  (MidgardUser *self);
+MidgardUser     	*__midgard_user_get               (MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error);
+MidgardUser     	**__midgard_user_query            (MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error);
+gboolean        	__midgard_user_create             (MidgardUser *self, GError **error);
+gboolean        	__midgard_user_update             (MidgardUser *self, GError **error);
+gboolean		__midgard_user_delete		  (MidgardUser *self, GError **error);
 gboolean        	__midgard_user_is_user            (MidgardUser *self);
 gboolean        	__midgard_user_is_admin           (MidgardUser *self);
 MidgardObject		*__midgard_user_get_person        (MidgardUser *self);
 gboolean		__midgard_user_set_person         (MidgardUser *self, MidgardObject *person);
-gboolean        	__midgard_user_login              (MidgardUser *self);
-gboolean        	__midgard_user_logout             (MidgardUser *self);
+gboolean        	__midgard_user_login              (MidgardUser *self, GError **error);
+gboolean        	__midgard_user_logout             (MidgardUser *self, GError **error);
 
 struct _MidgardUserPrivate {
 	MidgardObject *person;
@@ -110,7 +110,7 @@ midgard_user_new (MidgardConnection *mgd, guint n_params, const GParameter *para
 	if (parameters && n_params > 0) {
 
 		MidgardUserClass *klass = g_type_class_peek (MIDGARD_TYPE_USER);
-		return klass->get (mgd, n_params, parameters);
+		return klass->get (mgd, n_params, parameters, NULL);
 	}
 
 	MidgardUser *self = g_object_new (MIDGARD_TYPE_USER, "connection", mgd, NULL);
@@ -189,6 +189,7 @@ __convert_to_storage_parameters (MidgardConnection *mgd, guint n_params, const G
  * @mgd: #MidgardConnection instance
  * @n_params: number of parameters
  * @parameters: #GParameter with #MidgardUser properties
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Fetch #MidgardUser object from storage. 
  * At least 'login' and 'authtype' property are required to be set in parameters.
@@ -211,10 +212,10 @@ __convert_to_storage_parameters (MidgardConnection *mgd, guint n_params, const G
  * Since 9.09
  */
 MidgardUser *
-midgard_user_get (MidgardConnection *mgd, guint n_params, const GParameter *parameters)
+midgard_user_get (MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error)
 {
 	MidgardUserClass *klass = g_type_class_peek (MIDGARD_TYPE_USER);
-	return klass->get (mgd, n_params, parameters);
+	return klass->get (mgd, n_params, parameters, error);
 }
 
 MidgardUser *
@@ -311,10 +312,9 @@ __midgard_user_query (MidgardConnection *mgd, guint n_params, const GParameter *
 	MidgardUser **result = NULL;
 
 	if (n_params == 0) {
-		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Expected one parameter (at least) to get user object");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Expected one parameter (at least) to get user object", NULL);
 		return result;
 	}
-
 	
 	guint i;
 	GSList *constraints = NULL;
@@ -354,7 +354,7 @@ __midgard_user_query (MidgardConnection *mgd, guint n_params, const GParameter *
 	midgard_executable_execute (MIDGARD_EXECUTABLE (select), &err);
 	if (err) {
 		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, 
-				"Failed to query user. %s", err && err->message ? err->message : "Unknown reason");
+				"Failed to query user. %s", err && err->message ? err->message : "Unknown reason", NULL);
 		g_clear_error (&err);
 		goto free_objects_and_return;
 	}
@@ -438,7 +438,7 @@ __midgard_user_create (MidgardUser *self, GError **error)
 	if (auth_type == NULL || (auth_type && *auth_type == '\0')) {
 	
 		g_value_unset (&aval);
-		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, NULL);
 		return FALSE;
 	}
 
@@ -446,7 +446,7 @@ __midgard_user_create (MidgardUser *self, GError **error)
 
 	if (id == 0) {
 		g_value_unset (&aval);
-		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Unknown authentication type");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "Unknown authentication type", NULL);
 		return FALSE;
 	}
 
@@ -464,7 +464,7 @@ __midgard_user_create (MidgardUser *self, GError **error)
 	parameters[1].value = aval;
 	
 	/* Check if user with given login and authtype already exists */
-	MidgardUser *user = midgard_user_get (mgd, 2, (const GParameter *) parameters);
+	MidgardUser *user = midgard_user_get (mgd, 2, (const GParameter *) parameters, NULL);
 
 	/* Reset error, it might be changed by midgard_user_get */
 	
@@ -473,9 +473,8 @@ __midgard_user_create (MidgardUser *self, GError **error)
 	g_value_unset (&lval);
 
 	if (user) {
-		
 		g_object_unref (user);
-		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_DUPLICATE);
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_DUPLICATE, NULL);
 		return FALSE;
 	}
 
@@ -490,7 +489,7 @@ __midgard_user_create (MidgardUser *self, GError **error)
 	g_free ( (gchar *)MIDGARD_DBOBJECT (self)->dbpriv->guid);
 	MIDGARD_DBOBJECT (self)->dbpriv->guid = NULL;
 
-	g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL);
+	g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, NULL);
 
 	return FALSE;
 }
@@ -553,7 +552,7 @@ __midgard_user_update (MidgardUser *self, GError **error)
 	if (!guid
 		|| (*guid && *guid == '\0')
  		|| (guid && !midgard_is_guid (guid))) {
-		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid value");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid value", NULL);
 		return FALSE;
 	}
 
@@ -594,7 +593,7 @@ __midgard_user_update (MidgardUser *self, GError **error)
 	parameters[1].value = aval;	
 
 	/* Check if user with given guid and authtype already exists */
-	MidgardUser *user = midgard_user_get (mgd, np, (const GParameter *) parameters);
+	MidgardUser *user = midgard_user_get (mgd, np, (const GParameter *) parameters, NULL);
 
 	/* Reset error, it might be changed by midgard_user_get */
 	
@@ -621,6 +620,7 @@ __midgard_user_update (MidgardUser *self, GError **error)
 /**
  * midgard_user_delete:
  * @self: #MidgardUser instance
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  *
  * Delete user's storage record.
  * 
@@ -639,16 +639,16 @@ __midgard_user_update (MidgardUser *self, GError **error)
  * Since: 9.09.2
  */ 
 gboolean 
-midgard_user_delete (MidgardUser *self)
+midgard_user_delete (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail (self != NULL, FALSE);
 
 	MidgardUserClass *klass = MIDGARD_USER_GET_CLASS (self);
-	return klass->delete_record (self);
+	return klass->delete_record (self, error);
 }
 
 gboolean 
-__midgard_user_delete (MidgardUser *self)
+__midgard_user_delete (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail (self != NULL, FALSE);
 	g_return_val_if_fail (MIDGARD_IS_USER (self), FALSE);
@@ -657,14 +657,13 @@ __midgard_user_delete (MidgardUser *self)
 	const gchar *guid = MGD_OBJECT_GUID (self);
 
 	g_return_val_if_fail (mgd != NULL, FALSE);
-
 	
 	/* Validate guid */
 	if (!guid
 		|| (*guid && *guid == '\0')
  		|| (guid && !midgard_is_guid (guid))) {
 
-		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid value");
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INVALID_PROPERTY_VALUE, "Invalid guid value", error);
 		return FALSE;
 	}
 
@@ -673,18 +672,19 @@ __midgard_user_delete (MidgardUser *self)
 
       	g_debug ("%s", del_query->str);
 
-	GError *error = NULL;
+	GError *err = NULL;
 	GdaConnection *connection = mgd->priv->connection;
 #ifdef HAVE_LIBGDA_4
-	gda_execute_non_select_command (connection, del_query->str, &error);
+	gda_execute_non_select_command (connection, del_query->str, &err);
 #else	
-	gda_connection_execute_non_select_command (connection, del_query->str, &error);
+	gda_connection_execute_non_select_command (connection, del_query->str, &err);
 #endif
 	
 	g_string_free (del_query, TRUE);
 
-	if(error){
-		g_clear_error(&error);
+	if(err){
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, "%s", err->message ? err->message : "Unknown reason"); 
+		g_clear_error(&err);
 		return FALSE;
 	}
 
@@ -698,6 +698,7 @@ __midgard_user_delete (MidgardUser *self)
 /** 
  * midgard_user_log_in:
  * @self: #MidgardUser instance
+ * @error: (error-domains MIDGARD_GENERIC_ERROR): a pointer to store returned error
  * 
  * Logs in user instance, if given one is valid. 
  * A valid user object must have (at least) guid set. 
@@ -718,16 +719,16 @@ __midgard_user_delete (MidgardUser *self)
  * Since: 9.09
  */
 gboolean 
-midgard_user_log_in (MidgardUser *self)
+midgard_user_log_in (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail (self != NULL, FALSE);
 
 	MidgardUserClass *klass = MIDGARD_USER_GET_CLASS (self);
-	return klass->log_in (self);
+	return klass->log_in (self, error);
 }
 
 gboolean
-__midgard_user_login (MidgardUser *self)
+__midgard_user_login (MidgardUser *self, GError **error)
 {
 	g_return_val_if_fail(self != NULL, FALSE);
 	g_return_val_if_fail(MIDGARD_IS_USER (self), FALSE);
@@ -800,7 +801,7 @@ __midgard_user_logout (MidgardUser *self, GError **error)
 	GSList *list = mgd->priv->authstack;
 
 	if (list == NULL || (list && g_slist_length(list) < 1)) {
-		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, NULL;
+		g_set_error (error, MIDGARD_GENERIC_ERROR, MGD_ERR_INTERNAL, NULL);
 		return FALSE;
 	}
 
@@ -1122,7 +1123,7 @@ midgard_user_set_person (MidgardUser *self, MidgardObject *person)
 	g_free (self->priv->person_guid);
 	self->priv->person_guid = g_strdup (MGD_OBJECT_GUID (person));
 
-	return midgard_user_update (self);
+	return midgard_user_update (self, NULL);
 }
 
 /**
@@ -1200,7 +1201,7 @@ midgard_user_quick_login (MidgardConnection *mgd, const gchar *login, const gcha
 	if (!user)
 		return NULL;
 
-	if (midgard_user_log_in (user))
+	if (midgard_user_log_in (user, NULL))
 		return user;
 
 	g_object_unref (user);
@@ -1216,7 +1217,7 @@ static void _midgard_user_finalize(GObject *object)
 	MidgardUser *self = (MidgardUser *) object;
 	
 	if (self && (MIDGARD_DBOBJECT (self)->dbpriv && self->priv->is_logged))
-		(void) midgard_user_log_out (self);
+		(void) midgard_user_log_out (self, NULL);
 
 	g_free (self->priv->auth_type);
 	self->priv->auth_type = NULL;

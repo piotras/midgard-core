@@ -49,13 +49,13 @@ struct _MidgardUserClass{
 	
 	/* API methods */
 	MidgardObject *(*get_person)		(MidgardUser *self);
-	gboolean        (*log_in)              	(MidgardUser *self);
-	gboolean        (*log_out)             	(MidgardUser *self);
-	MidgardUser     *(*get)               	(MidgardConnection *mgd, guint n_params, const GParameter *parameters);
-	MidgardUser     **(*query) 		(MidgardConnection *mgd, guint n_params, const GParameter *parameters);
-	gboolean        (*create)           	(MidgardUser *self);
-	gboolean        (*update)             	(MidgardUser *self);
-	gboolean 	(*delete_record)	(MidgardUser *self);
+	gboolean        (*log_in)              	(MidgardUser *self, GError **error);
+	gboolean        (*log_out)             	(MidgardUser *self, GError **error);
+	MidgardUser     *(*get)               	(MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error);
+	MidgardUser     **(*query) 		(MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error);
+	gboolean        (*create)           	(MidgardUser *self, GError **error);
+	gboolean        (*update)             	(MidgardUser *self, GError **error);
+	gboolean 	(*delete_record)	(MidgardUser *self, GError **error);
 	gboolean 	(*is_user)		(MidgardUser *self);
 	gboolean 	(*is_admin)		(MidgardUser *self);
 };
@@ -75,21 +75,21 @@ struct _MidgardUser{
 GType midgard_user_get_type(void);
 
 MidgardUser 		*midgard_user_new		(MidgardConnection *mgd, guint n_params, const GParameter *parameters);
-MidgardUser 		*midgard_user_get		(MidgardConnection *mgd, guint n_params, const GParameter *parameters);
+MidgardUser 		*midgard_user_get		(MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error);
 MidgardUser 		*midgard_user_quick_login	(MidgardConnection *mgd, const gchar *login, const gchar *password);
-MidgardUser 		**midgard_user_query		(MidgardConnection *mgd, guint n_params, const GParameter *parameters);
-gboolean		midgard_user_create		(MidgardUser *self);
-gboolean 		midgard_user_update		(MidgardUser *self);
-gboolean 		midgard_user_delete		(MidgardUser *self);
+MidgardUser 		**midgard_user_query		(MidgardConnection *mgd, guint n_params, const GParameter *parameters, GError **error);
+gboolean		midgard_user_create		(MidgardUser *self, GError **error);
+gboolean 		midgard_user_update		(MidgardUser *self, GError **error);
+gboolean 		midgard_user_delete		(MidgardUser *self, GError **error);
 gboolean 		midgard_user_is_user		(MidgardUser *self);
 gboolean 		midgard_user_is_admin		(MidgardUser *self);
 MidgardObject		*midgard_user_get_person	(MidgardUser *self);
 gboolean 		midgard_user_set_person		(MidgardUser *self, MidgardObject *person);
-gboolean		midgard_user_log_in 		(MidgardUser *self);
-gboolean 		midgard_user_log_out 		(MidgardUser *self);
+gboolean		midgard_user_log_in 		(MidgardUser *self, GError **error);
+gboolean 		midgard_user_log_out 		(MidgardUser *self, GError **error);
 
 /* Deprecated */
-gboolean 	midgard_user_set_active	(MidgardUser *user, gboolean flag);
+gboolean 	midgard_user_set_active	(MidgardUser *user, gboolean flag, GError **error);
 
 
 G_END_DECLS
